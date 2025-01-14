@@ -1,0 +1,18 @@
+myenv/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Packages
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.env
+# Logs and cache
+*.log
+*.cache
+*.bak

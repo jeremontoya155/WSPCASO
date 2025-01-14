@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instagram Bot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Instagram Bot</h1>
+
+        <form action="/logout" method="POST" style="margin-top: 10px; text-align: center;">
+            <button id="boton-cerrar-sesion" class="logout-btn" style="background-color: #f44336; color: white; padding: 5px 10px; font-size: 12px; border: none; border-radius: 5px; cursor: pointer; width: 100px;">
+                Cerrar sesión
+            </button>
+        </form>
+        
+        <form id="bot-form" action="/bot" method="POST">
+            <label for="username">Usuario de Instagram:</label>
+            <input type="text" id="username" name="username" required>
+        
+            <label for="password">Contraseña:</label>
+            <input type="password" id="password" name="password" required>
+        
+            <label for="competencia">Cuentas de competencia (separadas por comas):</label>
+            <input type="text" id="competencia" name="competencia" required>
+        
+            <h2>Configura los Filtros para Seguir Usuarios</h2>
+        
+            <label for="ubicaciones">Ubicaciones:</label>
+            <input type="text" id="ubicaciones" name="ubicaciones" placeholder="Ej: chile, santiago">
+        
+            <label for="palabras_clave">Palabras clave en la biografía:</label>
+            <input type="text" id="palabras_clave" name="palabras_clave" placeholder="Ej: emprendedor, marketing">
+        
+            <label for="min_publicaciones">Mínimo de Publicaciones:</label>
+            <input type="number" id="min_publicaciones" name="min_publicaciones" value="50">
+        
+            <label for="min_seguidores">Mínimo de Seguidores:</label>
+            <input type="number" id="min_seguidores" name="min_seguidores" value="500">
+        
+            <label for="tipo_cuenta">Tipo de Cuenta:</label>
+            <select id="tipo_cuenta" name="tipo_cuenta">
+                <option value="publica">Pública</option>
+                <option value="privada">Privada</option>
+            </select>
+        
+            <button type="submit">Enviar</button>
+        </form>
+        
+        <!-- Log de Mensajes -->
+        {% if success %}
+        <p style="color: #00ffc3; font-size: 14px; margin-top: 20px;">{{ success }}</p>
+        {% endif %}
+        {% if error %}
+        <p style="color: #ff0033; font-size: 14px; margin-top: 20px;">{{ error }}</p>
+        {% endif %}
+    
+        {% if log %}
+        <div class="log">
+            <h2>Log de Mensajes Enviados:</h2>
+            <ul>
+                {% for entry in log %}
+                <li>
+                    <strong style="color: #00ffc3;">@{{ entry.username }}</strong>: {{ entry.mensaje }}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    
+        <!-- Sugerencia -->
+        {% if sugerencia %}
+        <div class="sugerencia-final" style="margin-top: 30px; padding: 10px; background: #2a2a2a; border-radius: 5px; color: #00ffc3;">
+            <h3>Sugerencia:</h3>
+            <p>{{ sugerencia }}</p>
+        </div>
+        {% endif %}
+    
+        <!-- Botón de descarga de reportes -->
+        <div class="descargar-reporte" style="margin-top: 20px;">
+            <h3 style="color: #00ffc3;">Descargar Reporte de Rendimiento</h3>
+            <a href="/descargar_reporte_pdf" style="text-decoration: none;">
+                <button id="descargar-pdf" style="padding: 15px; font-size: 16px; font-weight: bold; color: #121212; background: #00ffc3; border: none; border-radius: 5px; cursor: pointer; text-transform: uppercase; transition: background 0.3s, transform 0.2s;">
+                    Descargar PDF
+                </button>
+            </a>
+            <a href="/descargar_reporte_csv" style="text-decoration: none;">
+                <button id="descargar-csv" style="padding: 15px; font-size: 16px; font-weight: bold; color: #121212; background: #00ffc3; border: none; border-radius: 5px; cursor: pointer; text-transform: uppercase; transition: background 0.3s, transform 0.2s; margin-left: 10px;">
+                    Descargar CSV
+                </button>
+            </a>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Funcionalidad para el botón de cerrar sesión
+            const logoutButton = document.getElementById('boton-cerrar-sesion');
+            if (logoutButton) {
+                logoutButton.addEventListener('click', (e) => {
+                    console.log("Cerrando sesión...");
+                });
+            }
+
+            // Descarga de reportes
+            const botonPDF = document.getElementById('descargar-pdf');
+            const botonCSV = document.getElementById('descargar-csv');
+
+            if (botonPDF) {
+                botonPDF.addEventListener('click', () => {
+                    console.log("Descargando el reporte en formato PDF...");
+                    alert("Descargando el reporte en formato PDF...");
+                });
+            }
+
+            if (botonCSV) {
+                botonCSV.addEventListener('click', () => {
+                    console.log("Descargando el reporte en formato CSV...");
+                    alert("Descargando el reporte en formato CSV...");
+                });
+            }
+        });
+    </script>
+</body>
+</html>
