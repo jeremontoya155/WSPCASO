@@ -4,6 +4,7 @@ from config import UPLOAD_FOLDER, LOG_FOLDER
 from instagrapi import Client
 from database.models import db, registrar_usuario, collection_users, verificar_accion, registrar_accion 
 from datetime import datetime
+from instagrapi.exceptions import TwoFactorRequired
 import os
 from fpdf import FPDF
 import csv
@@ -12,7 +13,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from instagram.filters import filtrar_usuarios
 from instagram.follow import procesar_usuario, obtener_seguidores_de_competencia, procesar_seguidores
 from celery_app import celery
-from instagram.session import autenticar_bot
+from instagram.session import autenticar_bot, autenticar_con_2fa,validar_codigo_2fa
 from tasks.celery_tasks import seguir_cuenta, comentar_perfil, procesar_usuario_completo
 import random
 import time
@@ -87,6 +88,30 @@ def login():
     print("Accediendo al formulario de login (GET)")
     return render_template('login.html')
 
+
+
+@app.route('/verify-2fa', methods=['POST'])
+def verify_2fa():
+    """
+    Verifica el código 2FA y completa el proceso de autenticación en Instagram.
+    """
+    username_instagram = session.get('instagram_user')  # Recuperar usuario desde la sesión
+    code = request.form.get('code')
+
+    if not username_instagram:
+        return jsonify({"error": "⚠️ No hay usuario de Instagram en sesión para verificar 2FA."}), 400
+
+    try:
+        result = validar_codigo_2fa(code)
+        if result.get("authenticated"):
+            return jsonify({"message": result.get("message")}), 200
+        return jsonify({"error": result.get("error")}), 400
+    except Exception as e:
+        return jsonify({"error": f"❌ Error inesperado al verificar el código 2FA: {str(e)}"}), 400
+
+
+
+
 @app.route('/', methods=['GET', 'POST'])
 def home():
     print("Accediendo a la ruta /")
@@ -101,40 +126,28 @@ def home():
     print("Redirigiendo a /login desde /")
     return redirect(url_for('login'))
 
+
 @app.route('/bot', methods=['POST'])
 def iniciar_bot():
+    """
+    Maneja el inicio de sesión en Instagram y muestra la interfaz del bot.
+    """
+    username_instagram = request.form.get("username")
+    password_instagram = request.form.get("password")
+
+    if not username_instagram or not password_instagram:
+        return jsonify({"error": "⚠️ Debe proporcionar las credenciales de Instagram."}), 400
+
     try:
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "").strip()
-
-        if not username or not password:
-            return render_template("index.html", error="Debe proporcionar credenciales de Instagram.")
-
-        autenticar_bot(username, password)
-
-        competencia_raw = request.form.get("competencia", "").strip()
-        cantidad_seguidores = int(request.form.get("cantidad_seguidores", "10").strip())
-        competencia = [usuario.strip() for usuario in competencia_raw.split(",") if usuario.strip()]
-
-        for usuario_competencia in competencia:
-            print(f"Obteniendo seguidores de la competencia: {usuario_competencia}")
-            seguidores = obtener_seguidores_de_competencia(usuario_competencia, cantidad_seguidores)
-
-            for seguidor_id in seguidores:
-                print(f"Procesando seguidor con ID: {seguidor_id}")
-
-                if verificar_accion(seguidor_id, "procesado"):
-                    print(f"ℹ️ El seguidor con ID {seguidor_id} ya fue procesado. Saltando.")
-                    continue
-
-                procesar_usuario(seguidor_id)
-
-                registrar_accion(seguidor_id, "procesado", {"detalles": "Seguidor procesado por el bot."})
-
-        return render_template("index.html", success="El bot procesó los seguidores correctamente.")
+        # Intentar autenticar
+        result = autenticar_con_2fa(username_instagram, password_instagram)
+        if result.get("2fa_required"):
+            session['instagram_user'] = username_instagram  # Guardar el usuario en sesión
+            return jsonify({"2fa_required": True}), 200
+        return jsonify({"message": "✅ Inicio de sesión exitoso en Instagram"}), 200
     except Exception as e:
-        print(f"❌ Error al iniciar el bot: {e}")
-        return render_template("index.html", error=f"Error: {e}")
+        return jsonify({"error": f"❌ Error al iniciar sesión en Instagram: {str(e)}"}), 400
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():

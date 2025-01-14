@@ -11,18 +11,32 @@ cl = Client()
 
 def autenticar_con_2fa(username, password):
     """
-    Autentica en Instagram con manejo de 2FA si es requerido.
+    Autentica en Instagram y gestiona el caso en que se requiera 2FA.
     """
     try:
-        cl.login(username, password)
-        print("✅ Sesión iniciada correctamente.")
-    except TwoFactorRequired:
-        code = input("Introduce el código 2FA de tu aplicación autenticadora: ")
-        cl.two_factor_login(code)
-        print("✅ Sesión iniciada con 2FA correctamente.")
+        print(f"🔐 Iniciando sesión para @{username}")
+        cl.login(username, password)  # Intentar autenticación normal
+        print(f"✅ Sesión iniciada correctamente para @{username}")
+        return {"authenticated": True, "2fa_required": False}
+    except TwoFactorRequired as e:
+        print(f"⚠️ Se requiere 2FA para @{username}")
+        return {"authenticated": False, "2fa_required": True, "error": str(e)}
     except Exception as e:
         print(f"❌ Error durante la autenticación: {e}")
-        raise
+        raise Exception(f"Error de autenticación: {e}")
+
+def validar_codigo_2fa(code):
+    """
+    Verifica el código 2FA y completa la autenticación.
+    """
+    try:
+        print(f"🔑 Verificando código 2FA: {code}")
+        cl.two_factor_login(code)  # Validar el código 2FA con la API de Instagram
+        print("✅ Código 2FA verificado correctamente")
+        return {"authenticated": True, "message": "Sesión iniciada correctamente con 2FA"}
+    except Exception as e:
+        print(f"❌ Error al verificar el código 2FA: {e}")
+        return {"authenticated": False, "error": str(e)}
 
 
 

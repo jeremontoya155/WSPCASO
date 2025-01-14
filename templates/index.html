@@ -15,7 +15,7 @@
                 Cerrar sesión
             </button>
         </form>
-        
+ 
         <form id="bot-form" action="/bot" method="POST">
             <label for="username">Usuario de Instagram:</label>
             <input type="text" id="username" name="username" required>
@@ -25,7 +25,8 @@
         
             <label for="competencia">Cuentas de competencia (separadas por comas):</label>
             <input type="text" id="competencia" name="competencia" required>
-        
+
+    
             <h2>Configura los Filtros para Seguir Usuarios</h2>
         
             <label for="ubicaciones">Ubicaciones:</label>
@@ -49,6 +50,7 @@
             <button type="submit">Enviar</button>
         </form>
         
+
         <!-- Log de Mensajes -->
         {% if success %}
         <p style="color: #00ffc3; font-size: 14px; margin-top: 20px;">{{ success }}</p>
@@ -70,59 +72,79 @@
         </div>
         {% endif %}
     
-        <!-- Sugerencia -->
-        {% if sugerencia %}
-        <div class="sugerencia-final" style="margin-top: 30px; padding: 10px; background: #2a2a2a; border-radius: 5px; color: #00ffc3;">
-            <h3>Sugerencia:</h3>
-            <p>{{ sugerencia }}</p>
-        </div>
-        {% endif %}
-    
-        <!-- Botón de descarga de reportes -->
-        <div class="descargar-reporte" style="margin-top: 20px;">
-            <h3 style="color: #00ffc3;">Descargar Reporte de Rendimiento</h3>
-            <a href="/descargar_reporte_pdf" style="text-decoration: none;">
-                <button id="descargar-pdf" style="padding: 15px; font-size: 16px; font-weight: bold; color: #121212; background: #00ffc3; border: none; border-radius: 5px; cursor: pointer; text-transform: uppercase; transition: background 0.3s, transform 0.2s;">
-                    Descargar PDF
-                </button>
-            </a>
-            <a href="/descargar_reporte_csv" style="text-decoration: none;">
-                <button id="descargar-csv" style="padding: 15px; font-size: 16px; font-weight: bold; color: #121212; background: #00ffc3; border: none; border-radius: 5px; cursor: pointer; text-transform: uppercase; transition: background 0.3s, transform 0.2s; margin-left: 10px;">
-                    Descargar CSV
-                </button>
-            </a>
-        </div>
-    </div>
 
-    <!-- Scripts -->
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // Funcionalidad para el botón de cerrar sesión
-            const logoutButton = document.getElementById('boton-cerrar-sesion');
-            if (logoutButton) {
-                logoutButton.addEventListener('click', (e) => {
-                    console.log("Cerrando sesión...");
+
+<!-- Formulario para ingresar el código 2FA -->
+<div id="form-2fa" style="display: none; margin-top: 20px;">
+    <h2>Ingrese el código de autenticación</h2>
+    <form id="2fa-form">
+        <label for="2fa-code">Código 2FA:</label>
+        <input type="text" id="2fa-code" name="code" required>
+        <button type="submit">Enviar Código</button>
+    </form>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const botForm = document.getElementById('bot-form');
+        const twoFaForm = document.getElementById('form-2fa');
+
+        // Manejo del formulario de inicio de sesión en Instagram
+        botForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            try {
+                const formData = new FormData(botForm);
+                const response = await fetch('/bot', {
+                    method: 'POST',
+                    body: formData
                 });
-            }
 
-            // Descarga de reportes
-            const botonPDF = document.getElementById('descargar-pdf');
-            const botonCSV = document.getElementById('descargar-csv');
+                const data = await response.json();
+                console.log("Respuesta del backend:", data); // Depuración
 
-            if (botonPDF) {
-                botonPDF.addEventListener('click', () => {
-                    console.log("Descargando el reporte en formato PDF...");
-                    alert("Descargando el reporte en formato PDF...");
-                });
-            }
-
-            if (botonCSV) {
-                botonCSV.addEventListener('click', () => {
-                    console.log("Descargando el reporte en formato CSV...");
-                    alert("Descargando el reporte en formato CSV...");
-                });
+                if (data["2fa_required"]) {
+                    alert("Se requiere autenticación 2FA. Ingresa el código.");
+                    twoFaForm.style.display = 'block'; // Mostrar formulario 2FA
+                } else if (data.message) {
+                    alert(data.message);
+                } else if (data.error) {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (error) {
+                console.error("Error en la solicitud:", error);
+                alert("Hubo un problema con la solicitud. Por favor, inténtalo de nuevo.");
             }
         });
-    </script>
+
+        // Manejo del formulario 2FA
+        twoFaForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            try {
+                const formData = new FormData(twoFaForm);
+                const response = await fetch('/verify-2fa', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                console.log("Respuesta del backend (2FA):", data); // Depuración
+
+                if (data.message) {
+                    alert(data.message); // Sesión iniciada exitosamente
+                    twoFaForm.style.display = 'none'; // Ocultar formulario
+                } else if (data.error) {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (error) {
+                console.error("Error en la solicitud:", error);
+                alert("Hubo un problema con la solicitud. Por favor, inténtalo de nuevo.");
+            }
+        });
+    });
+</script>
+
+
 </body>
 </html>
