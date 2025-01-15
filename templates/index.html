@@ -86,64 +86,66 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const botForm = document.getElementById('bot-form');
-        const twoFaForm = document.getElementById('form-2fa');
+    const botForm = document.getElementById('bot-form');
+    const twoFaForm = document.getElementById('form-2fa-form'); // Cambiado para seleccionar el formulario interno
 
-        // Manejo del formulario de inicio de sesión en Instagram
-        botForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
+    // Manejo del formulario principal (inicio de sesión en Instagram)
+    botForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
 
-            try {
-                const formData = new FormData(botForm);
-                const response = await fetch('/bot', {
-                    method: 'POST',
-                    body: formData
-                });
+        try {
+            const formData = new FormData(botForm); // Debe ser un formulario válido
+            const response = await fetch('/bot', {
+                method: 'POST',
+                body: formData,
+            });
 
-                const data = await response.json();
-                console.log("Respuesta del backend:", data); // Depuración
+            const data = await response.json();
+            console.log("Respuesta del backend:", data);
 
-                if (data["2fa_required"]) {
-                    alert("Se requiere autenticación 2FA. Ingresa el código.");
-                    twoFaForm.style.display = 'block'; // Mostrar formulario 2FA
-                } else if (data.message) {
-                    alert(data.message);
-                } else if (data.error) {
-                    alert(`Error: ${data.error}`);
-                }
-            } catch (error) {
-                console.error("Error en la solicitud:", error);
-                alert("Hubo un problema con la solicitud. Por favor, inténtalo de nuevo.");
+            if (data["2fa_required"]) {
+                alert(data.message);
+                document.getElementById('form-2fa').style.display = 'block'; // Mostrar formulario de 2FA
+            } else if (data.message) {
+                alert(data.message);
+            } else if (data.error) {
+                alert(`Error: ${data.error}`);
             }
-        });
-
-        // Manejo del formulario 2FA
-        twoFaForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
-
-            try {
-                const formData = new FormData(twoFaForm);
-                const response = await fetch('/verify-2fa', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const data = await response.json();
-                console.log("Respuesta del backend (2FA):", data); // Depuración
-
-                if (data.message) {
-                    alert(data.message); // Sesión iniciada exitosamente
-                    twoFaForm.style.display = 'none'; // Ocultar formulario
-                } else if (data.error) {
-                    alert(`Error: ${data.error}`);
-                }
-            } catch (error) {
-                console.error("Error en la solicitud:", error);
-                alert("Hubo un problema con la solicitud. Por favor, inténtalo de nuevo.");
-            }
-        });
+        } catch (error) {
+            console.error("Error en la solicitud:", error);
+            alert("Hubo un problema con la solicitud. Por favor, inténtalo de nuevo.");
+        }
     });
+
+    // Manejo del formulario de 2FA
+    twoFaForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+
+        try {
+            const formData = new FormData(twoFaForm); // Debe ser el formulario interno del 2FA
+            const response = await fetch('/verify-2fa', {
+                method: 'POST',
+                body: formData,
+            });
+
+            const data = await response.json();
+            console.log("Respuesta del backend (2FA):", data);
+
+            if (data.message) {
+                alert(data.message);
+                document.getElementById('form-2fa').style.display = 'none'; // Ocultar formulario de 2FA
+            } else if (data.error) {
+                alert(`Error: ${data.error}`);
+            }
+        } catch (error) {
+            console.error("Error en la solicitud:", error);
+            alert("Hubo un problema con la solicitud. Por favor, inténtalo de nuevo.");
+        }
+    });
+});
+
 </script>
+
 
 
 </body>

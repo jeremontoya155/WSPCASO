@@ -89,25 +89,42 @@ def login():
     return render_template('login.html')
 
 
-
 @app.route('/verify-2fa', methods=['POST'])
-def verify_2fa():
+def verificar_2fa():
     """
-    Verifica el código 2FA y completa el proceso de autenticación en Instagram.
+    Verifica el código 2FA enviado desde el frontend y completa la autenticación en Instagram.
     """
-    username_instagram = session.get('instagram_user')  # Recuperar usuario desde la sesión
-    code = request.form.get('code')
+    username = session.get('instagram_user')  # Recupera el usuario almacenado en la sesión
+    code = request.form.get('code')  # Código enviado desde el frontend
 
-    if not username_instagram:
-        return jsonify({"error": "⚠️ No hay usuario de Instagram en sesión para verificar 2FA."}), 400
+    if not username:
+        return jsonify({"error": "⚠️ No hay usuario en sesión para verificar 2FA."}), 400
 
     try:
+        # Validar el código 2FA
         result = validar_codigo_2fa(code)
-        if result.get("authenticated"):
-            return jsonify({"message": result.get("message")}), 200
-        return jsonify({"error": result.get("error")}), 400
+        if result["authenticated"]:
+            return jsonify({"message": "✅ Sesión iniciada correctamente con 2FA."}), 200
+        else:
+            return jsonify({"error": result["error"]}), 400
     except Exception as e:
-        return jsonify({"error": f"❌ Error inesperado al verificar el código 2FA: {str(e)}"}), 400
+        print(f"❌ Error al verificar el código 2FA: {e}")
+        return jsonify({"error": f"❌ Error al verificar el código 2FA: {str(e)}"}), 400
+
+
+
+def validar_codigo_2fa(code):
+    """
+    Valida el código 2FA proporcionado por el usuario.
+    """
+    try:
+        print(f"🔑 Verificando código 2FA: {code}")
+        cl.two_factor_login(code)  # Validar el código 2FA con Instagram
+        print("✅ Código 2FA verificado correctamente.")
+        return {"authenticated": True, "message": "Sesión iniciada correctamente con 2FA."}
+    except Exception as e:
+        print(f"❌ Error al verificar el código 2FA: {e}")
+        return {"authenticated": False, "error": str(e)}
 
 
 
@@ -127,26 +144,52 @@ def home():
     return redirect(url_for('login'))
 
 
+
+def autenticar_bot(username, password):
+    """
+    Maneja la autenticación inicial en Instagram, incluyendo el caso de 2FA.
+    """
+    try:
+        print(f"🔐 Iniciando sesión en Instagram para @{username}...")
+        cl.login(username, password)  # Intenta iniciar sesión
+        return {"authenticated": True, "message": "✅ Sesión iniciada correctamente."}
+
+    except TwoFactorRequired as e:
+        print("⚠️ Se requiere 2FA para este usuario.")
+        return {"2fa_required": True, "message": "⚠️ Se requiere autenticación 2FA. Ingresa el código."}
+
+    except Exception as e:
+        print(f"❌ Error al autenticar: {e}")
+        raise
+
 @app.route('/bot', methods=['POST'])
 def iniciar_bot():
     """
-    Maneja el inicio de sesión en Instagram y muestra la interfaz del bot.
+    Maneja el inicio de sesión en Instagram desde el frontend.
     """
-    username_instagram = request.form.get("username")
-    password_instagram = request.form.get("password")
-
-    if not username_instagram or not password_instagram:
-        return jsonify({"error": "⚠️ Debe proporcionar las credenciales de Instagram."}), 400
-
     try:
-        # Intentar autenticar
-        result = autenticar_con_2fa(username_instagram, password_instagram)
+        username_instagram = request.form.get("username", "").strip()
+        password_instagram = request.form.get("password", "").strip()
+
+        if not username_instagram or not password_instagram:
+            return jsonify({"error": "⚠️ Debes proporcionar las credenciales de Instagram."}), 400
+
+        # Autenticación inicial
+        result = autenticar_bot(username_instagram, password_instagram)
+
         if result.get("2fa_required"):
-            session['instagram_user'] = username_instagram  # Guardar el usuario en sesión
-            return jsonify({"2fa_required": True}), 200
-        return jsonify({"message": "✅ Inicio de sesión exitoso en Instagram"}), 200
+            session['instagram_user'] = username_instagram  # Guarda el usuario en sesión
+            return jsonify({
+                "2fa_required": True,
+                "message": "⚠️ Se requiere autenticación 2FA. Ingresa el código."
+            }), 200
+
+        return jsonify({"message": "✅ Sesión iniciada correctamente en Instagram."}), 200
+
     except Exception as e:
-        return jsonify({"error": f"❌ Error al iniciar sesión en Instagram: {str(e)}"}), 400
+        error_message = str(e)
+        print(f"❌ Error al iniciar sesión en Instagram: {error_message}")
+        return jsonify({"error": f"❌ Error al iniciar sesión: {error_message}"}), 400
 
 
 @app.route('/register', methods=['GET', 'POST'])
