@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seleccionar Acciones</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .user-card {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+
+        .error-card {
+            border: 2px solid red;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            background-color: #ffe6e6;
+        }
+
+        .error-card h2 {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Selecciona las Acciones</h1>
+    
+        <!-- Formulario de Competidores y Filtros -->
+        <form id="filters-form" style="margin-bottom: 20px;">
+            <h2>Usuarios de Competencia</h2>
+            <label for="competidores">Competidores:</label>
+            <textarea id="competidores" name="competidores" rows="3" placeholder="Ingresa competidores separados por comas">{{ competencia }}</textarea>
+            <small>Ejemplo: competencia1, competencia2, competencia3</small>
+    
+            <h2>Configurar Filtros</h2>
+            <label for="ubicaciones">Ubicaciones:</label>
+            <input type="text" id="ubicaciones" name="ubicaciones" placeholder="Ej: chile, santiago">
+    
+            <label for="palabras_clave">Palabras clave en la biografía:</label>
+            <input type="text" id="palabras_clave" name="palabras_clave" placeholder="Ej: emprendedor, marketing">
+    
+            <label for="min_publicaciones">Mínimo de Publicaciones:</label>
+            <input type="number" id="min_publicaciones" name="min_publicaciones" value="10">
+    
+            <label for="min_seguidores">Mínimo de Seguidores:</label>
+            <input type="number" id="min_seguidores" name="min_seguidores" value="100">
+    
+            <label for="tipo_cuenta">Tipo de Cuenta:</label>
+            <select id="tipo_cuenta" name="tipo_cuenta">
+                <option value="publica">Pública</option>
+                <option value="privada">Privada</option>
+            </select>
+    
+            <button type="submit">Aplicar Filtros</button>
+        </form>
+    
+        <!-- Contenedor para mostrar usuarios -->
+        <div id="users-container">
+            <p>No hay usuarios procesados todavía.</p>
+        </div>
+    
+        <!-- Botón para cargar más usuarios -->
+        <button id="cargar-mas-usuarios" style="margin-top: 20px;">Cargar Más Usuarios</button>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+    const filtersForm = document.getElementById('filters-form');
+    const usersContainer = document.getElementById('users-container');
+    const cargarMasUsuariosBtn = document.getElementById('cargar-mas-usuarios');
+
+    // Función reutilizable para realizar solicitudes al backend
+    async function fetchData(url, method = 'POST', body = null, headers = {}) {
+        try {
+            const response = await fetch(url, { method, headers, body });
+            if (!response.ok) {
+                throw new Error(`Error HTTP: ${response.status}`);
+            }
+            const data = await response.json();
+            console.log(`[DEBUG] Respuesta recibida del backend (${url}):`, data);
+            return data;
+        } catch (error) {
+            console.error(`[DEBUG] Error en la solicitud a ${url}:`, error);
+            throw error;
+        }
+    }
+
+    // Manejar el envío del formulario de filtros
+    if (filtersForm) {
+        filtersForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const formData = new FormData(filtersForm);
+
+            console.log("[DEBUG] Enviando filtros al backend:", Object.fromEntries(formData));
+
+            try {
+                const data = await fetchData('/aplicar_filtros', 'POST', formData);
+
+                usersContainer.innerHTML = ""; // Limpiar el contenedor
+
+                if (data.success) {
+                    // Mostrar usuarios que cumplen los filtros
+                    if (data.users.length > 0) {
+                        data.users.forEach(user => {
+                            const userCard = crearUserCard(user);
+                            usersContainer.appendChild(userCard);
+                        });
+                    } else {
+                        usersContainer.innerHTML += "<p>No se encontraron usuarios que cumplan los filtros.</p>";
+                    }
+
+                    // Mostrar errores
+                    if (data.errors.length > 0) {
+                        data.errors.forEach(errorUser => {
+                            const errorCard = crearErrorCard(errorUser);
+                            usersContainer.appendChild(errorCard);
+
+                            // Manejar error de bloqueo temporal de Instagram
+                            if (errorUser.error.includes("Please wait a few minutes before you try again")) {
+                                alert("Instagram está limitando las solicitudes. Intenta nuevamente más tarde.");
+                            }
+                        });
+                    }
+                } else {
+                    alert(`Error al aplicar filtros: ${data.error}`);
+                }
+            } catch (error) {
+                alert("Hubo un problema al aplicar los filtros. Revisa la consola para más detalles.");
+            }
+        });
+    }
+
+    // Función para crear una tarjeta de usuario
+    function crearUserCard(user) {
+        console.log("[DEBUG] Creando tarjeta para el usuario:", user);
+        return `
+            <div class="user-card">
+                <h2>@${user.username}</h2>
+                <p><strong>Biografía:</strong> ${user.biography || 'Sin biografía disponible'}</p>
+                <p><strong>Seguidores:</strong> ${user.follower_count}</p>
+                <p><strong>Publicaciones:</strong> ${user.media_count}</p>
+            </div>
+        `;
+    }
+
+    // Función para crear una tarjeta de error
+    function crearErrorCard(errorUser) {
+        console.log("[DEBUG] Creando tarjeta de error para el usuario:", errorUser);
+        return `
+            <div class="error-card">
+                <h2>Error en ID: ${errorUser.id}</h2>
+                <p><strong>Razón:</strong> ${errorUser.error || 'Sin especificar'}</p>
+            </div>
+        `;
+    }
+});
+
+
+    </script>
+</body>
+</html>

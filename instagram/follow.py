@@ -1,5 +1,6 @@
 import random
 import time
+<<<<<<< HEAD
 from datetime import datetime
 from database.models import collection_seguidos
 from instagram.session import cl
@@ -10,13 +11,34 @@ from database.models import registrar_accion
 # Configuración de límites y horarios
 LIMITES_ACCIONES = {
     "likes": 30  # Máximo "me gusta" diarios
+=======
+import os
+from datetime import datetime
+from database.models import registrar_accion
+from instagram.session import cl
+from json.decoder import JSONDecodeError
+from openai_utils import extraer_nombre_apodo
+from instagram.session import autenticar_bot, reautenticar_sesion, verificar_autenticacion
+from instagrapi.exceptions import LoginRequired
+
+# Configuración de límites y horarios
+LIMITES_ACCIONES = {
+    "likes": 30,  # Máximo "me gusta" diarios
+    "comments": 20,  # Máximo comentarios diarios
+    "follows": 50,  # Máximo seguimientos diarios
+>>>>>>> 3f8b5aa (mejoras)
 }
 HORA_INICIO = 9
 HORA_FIN = 23
 
+<<<<<<< HEAD
 tiempo_pausa_prolongada = 3600  # 1 hora después de 10 "me gusta"
 likes_realizados = 0
 
+=======
+tiempo_pausa_prolongada = 3600  # 1 hora después de ciertas acciones
+UPLOAD_FOLDER = "./uploads"
+>>>>>>> 3f8b5aa (mejoras)
 # Funciones auxiliares
 def delay_aleatorio(min_seg=30, max_seg=60):
     """Introduce un delay más largo para evitar bloqueos."""
@@ -29,6 +51,7 @@ def dentro_de_horario():
     hora_actual = datetime.now().hour
     return HORA_INICIO <= hora_actual < HORA_FIN
 
+<<<<<<< HEAD
 def verificar_limite_likes():
     """Verifica si el límite de likes se ha alcanzado."""
     return likes_realizados < LIMITES_ACCIONES["likes"]
@@ -38,6 +61,13 @@ def registrar_like():
     global likes_realizados
     likes_realizados += 1
 
+=======
+def verificar_limite_accion(accion):
+    """Verifica si el límite de una acción específica se ha alcanzado."""
+    return registrar_accion.cuenta_acciones(accion) < LIMITES_ACCIONES[accion]
+
+# Funciones principales de acciones
+>>>>>>> 3f8b5aa (mejoras)
 def dar_me_gusta_a_publicaciones(user_id):
     try:
         publicaciones = cl.user_medias(user_id, amount=1)
@@ -49,6 +79,7 @@ def dar_me_gusta_a_publicaciones(user_id):
     except Exception as e:
         print(f"❌ Error al dar 'me gusta': {e}")
 
+<<<<<<< HEAD
 
 def ver_historias_de_usuario(user_id):
     try:
@@ -119,3 +150,116 @@ def obtener_seguidores_de_competencia(username, cantidad=10):
         print(f"❌ Error al obtener seguidores de {username}: {e}")
         return []
 
+=======
+def comentar_publicacion(user_id, comentario):
+    try:
+        publicaciones = cl.user_medias(user_id, amount=1)
+        if publicaciones:
+            publicacion_id = publicaciones[0].id
+            cl.media_comment(publicacion_id, comentario)
+            registrar_accion(user_id, "comentario", {"publicacion_id": publicacion_id, "comentario": comentario})
+            print(f"✅ Comentario realizado en la publicación {publicacion_id}.")
+    except Exception as e:
+        print(f"❌ Error al comentar: {e}")
+
+def enviar_dm(user_id, mensaje):
+    try:
+        cl.direct_send(mensaje, [user_id])
+        registrar_accion(user_id, "dm", {"mensaje": mensaje})
+        print(f"✅ Mensaje enviado a {user_id}.")
+    except Exception as e:
+        print(f"❌ Error al enviar DM: {e}")
+
+def seguir_usuario(user_id):
+    try:
+        cl.user_follow(user_id)
+        registrar_accion(user_id, "seguir", {})
+        print(f"✅ Usuario {user_id} seguido correctamente.")
+    except Exception as e:
+        print(f"❌ Error al seguir usuario: {e}")
+def leer_mensajes_desde_txt():
+    """Lee los mensajes desde los archivos TXT en la carpeta configurada."""
+    mensajes = []
+    try:
+        for archivo in os.listdir(UPLOAD_FOLDER):
+            if archivo.endswith(".txt"):
+                ruta = os.path.join(UPLOAD_FOLDER, archivo)
+                with open(ruta, "r", encoding="utf-8") as f:
+                    mensajes.extend([linea.strip() for linea in f if linea.strip()])
+        return mensajes
+    except Exception as e:
+        print(f"Error al leer mensajes desde TXT: {e}")
+        return ["Espero que estés bien 😊."]
+
+def generar_mensaje_personalizado(username, bio=None):
+    """Genera un mensaje personalizado comenzando por el nombre del usuario."""
+    nombre, genero = extraer_nombre_apodo(username, bio)
+
+    # Si no hay nombre, usar el nombre de usuario como referencia
+    if not nombre:
+        nombre = username
+
+    # Seleccionar mensaje aleatorio
+    mensajes = leer_mensajes_desde_txt()
+    mensaje_aleatorio = random.choice(mensajes)
+
+    # Construir mensaje personalizado
+    mensaje_personalizado = f"{nombre}, {mensaje_aleatorio}"
+    print(f"Mensaje personalizado generado: {mensaje_personalizado}")
+    return mensaje_personalizado
+
+def enviar_mensaje_personalizado(user_id, username, bio=None):
+    """Envía un mensaje personalizado a un usuario de Instagram."""
+    try:
+        mensaje = generar_mensaje_personalizado(username, bio)
+        cl.direct_send(mensaje, [user_id])
+        registrar_accion(user_id, "dm", {"mensaje": mensaje})
+        print(f"✅ Mensaje enviado exitosamente a @{username}: {mensaje}")
+        return True
+    except Exception as e:
+        print(f"❌ Error al enviar mensaje a @{username}: {e}")
+        return False
+
+
+# Función genérica para ejecutar acciones
+def ejecutar_accion(user_id, accion, **kwargs):
+    if not dentro_de_horario():
+        return {"success": False, "error": "Fuera del horario permitido."}
+
+    if not verificar_limite_accion(accion):
+        return {"success": False, "error": f"Límite diario alcanzado para {accion}."}
+
+    try:
+        if accion == "like":
+            dar_me_gusta_a_publicaciones(user_id)
+        elif accion == "comment":
+            comentario = kwargs.get("comentario", "Comentario genérico.")
+            comentar_publicacion(user_id, comentario)
+        elif accion == "dm":
+            enviar_mensaje_personalizado(user_id, kwargs.get("username"), kwargs.get("bio"))
+        elif accion == "follow":
+            seguir_usuario(user_id)
+        else:
+            return {"success": False, "error": "Acción no reconocida."}
+
+        return {"success": True, "message": f"Acción '{accion}' ejecutada correctamente."}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def obtener_seguidores_de_competencia(username, cantidad=1):  # Por defecto 1 seguidor
+    try:
+        if not verificar_autenticacion():
+            print("⚠️ Sesión no válida. Reautenticando...")
+            reautenticar_sesion()
+
+        user_id = cl.user_id_from_username(username)
+        print(f"🔍 User ID obtenido para la competencia {username}: {user_id}")
+
+        seguidores = cl.user_followers(user_id, amount=cantidad)
+        print(f"✅ {len(seguidores)} seguidores obtenidos de {username}.")
+        return list(seguidores.keys())[:1]  # Retorna solo el primer seguidor
+    except Exception as e:
+        print(f"❌ Error al obtener seguidores de {username}: {e}")
+        return []
+>>>>>>> 3f8b5aa (mejoras)

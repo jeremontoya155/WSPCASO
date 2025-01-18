@@ -3,18 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<<<<<<< HEAD
     <title>Instagram Bot</title>
+=======
+    <title>Inicio de Sesión - Instagram Bot</title>
+>>>>>>> 3f8b5aa (mejoras)
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
     <div class="container">
+<<<<<<< HEAD
         <h1>Instagram Bot</h1>
 
         <form action="/logout" method="POST" style="margin-top: 10px; text-align: center;">
+=======
+        <h1>Inicia Sesión</h1>
+
+        <!-- Formulario de inicio de sesión -->
+        <form id="instagram-login-form" method="POST" action="/instagram-login">
+            <label for="instagram-username">Usuario de Instagram:</label>
+            <input type="text" id="instagram-username" name="instagram_username" required>
+        
+            <label for="instagram-password">Contraseña de Instagram:</label>
+            <input type="password" id="instagram-password" name="instagram_password" required>
+        
+            <button type="submit">Iniciar sesión en Instagram</button>
+        </form>
+        
+
+        <div id="form-2fa" style="display: none;">
+            <h2>Autenticación de Dos Factores</h2>
+            <form id="two-fa-form" method="POST">
+                <label for="2fa-code">Ingrese el Código de 2FA:</label>
+                <input type="text" id="2fa-code" name="code" required>
+                <button type="submit">Enviar Código</button>
+            </form>
+        </div>
+        
+
+        <!-- Formulario para cerrar sesión -->
+        <form action="/logout" method="POST" style="margin-top: 20px; text-align: center;">
+>>>>>>> 3f8b5aa (mejoras)
             <button id="boton-cerrar-sesion" class="logout-btn" style="background-color: #f44336; color: white; padding: 5px 10px; font-size: 12px; border: none; border-radius: 5px; cursor: pointer; width: 100px;">
                 Cerrar sesión
             </button>
         </form>
+<<<<<<< HEAD
  
         <form id="bot-form" action="/bot" method="POST">
             <label for="username">Usuario de Instagram:</label>
@@ -96,11 +130,34 @@
         try {
             const formData = new FormData(botForm); // Debe ser un formulario válido
             const response = await fetch('/bot', {
+=======
+
+        <!-- Mensajes del backend -->
+        {% if error %}
+        <p style="color: red; margin-top: 20px;">{{ error }}</p>
+        {% endif %}
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+    const loginForm = document.getElementById('instagram-login-form');
+    const twoFaForm = document.getElementById('two-fa-form');
+    const twoFaCodeInput = document.getElementById('2fa-code');
+
+    // Manejo del envío del formulario de inicio de sesión
+    loginForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const formData = new FormData(loginForm);
+
+        try {
+            const response = await fetch('/instagram-login', {
+>>>>>>> 3f8b5aa (mejoras)
                 method: 'POST',
                 body: formData,
             });
 
             const data = await response.json();
+<<<<<<< HEAD
             console.log("Respuesta del backend:", data);
 
             if (data["2fa_required"]) {
@@ -109,10 +166,22 @@
             } else if (data.message) {
                 alert(data.message);
             } else if (data.error) {
+=======
+            console.log("[DEBUG] Respuesta del backend:", data);
+
+            if (data["2fa_required"]) {
+                alert(data.message);
+                document.getElementById('form-2fa').style.display = "block"; // Mostrar formulario de 2FA
+            } else if (data.success) {
+                alert(data.message);
+                window.location.href = data.redirect; // Redirigir a /acciones
+            } else {
+>>>>>>> 3f8b5aa (mejoras)
                 alert(`Error: ${data.error}`);
             }
         } catch (error) {
             console.error("Error en la solicitud:", error);
+<<<<<<< HEAD
             alert("Hubo un problema con la solicitud. Por favor, inténtalo de nuevo.");
         }
     });
@@ -140,13 +209,49 @@
         } catch (error) {
             console.error("Error en la solicitud:", error);
             alert("Hubo un problema con la solicitud. Por favor, inténtalo de nuevo.");
+=======
+            alert("Hubo un problema al iniciar sesión. Por favor, inténtalo de nuevo.");
+        }
+    });
+
+    // Manejo del envío del formulario de 2FA
+    twoFaForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const code = twoFaCodeInput.value;
+
+        try {
+            const response = await fetch('/verify-2fa', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ code }),
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert("Autenticación 2FA exitosa.");
+                window.location.href = "/acciones"; // Redirigir a /acciones
+            } else {
+                alert(`Error en autenticación 2FA: ${data.error}`);
+            }
+        } catch (error) {
+            console.error("Error en la solicitud de 2FA:", error);
+            alert("Hubo un problema con la autenticación 2FA.");
+>>>>>>> 3f8b5aa (mejoras)
         }
     });
 });
 
+<<<<<<< HEAD
 </script>
 
 
 
+=======
+    </script>
+    
+>>>>>>> 3f8b5aa (mejoras)
 </body>
 </html>
