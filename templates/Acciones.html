@@ -11,7 +11,12 @@
             padding: 10px;
             margin: 10px 0;
             border-radius: 5px;
-            background-color: #f9f9f9;
+            background-color: black;
+            color: white;
+        }
+
+        .user-card button {
+            margin-right: 5px;
         }
 
         .error-card {
@@ -60,108 +65,284 @@
             <button type="submit">Aplicar Filtros</button>
         </form>
     
-        <!-- Contenedor para mostrar usuarios -->
-        <div id="users-container">
-            <p>No hay usuarios procesados todavía.</p>
+            <!-- Contenedor para seleccionar acciones globales -->
+            <h2>Selecciona Acciones para el Lote:</h2>
+            <div id="acciones-lote">
+                <label><input type="checkbox" name="accion" value="follow"> Seguir</label>
+                <label><input type="checkbox" name="accion" value="comment"> Comentar</label>
+                <label><input type="checkbox" name="accion" value="like"> Dar Me Gusta</label>
+                <label><input type="checkbox" name="accion" value="dm"> Enviar DM</label>
+                <label><input type="checkbox" name="accion" value="view_story"> Ver Historias</label>
+            </div>
+            <button id="realizar-acciones-lote" style="margin-top: 20px;">Realizar Acciones para el Lote</button>
+        
+            <!-- Contenedor para mostrar usuarios -->
+            <div id="users-container">
+                <p>No hay usuarios procesados todavía.</p>
+            </div>
         </div>
-    
+        
         <!-- Botón para cargar más usuarios -->
-        <button id="cargar-mas-usuarios" style="margin-top: 20px;">Cargar Más Usuarios</button>
+        <button id="cargar-mas-usuarios" onclick="cargarMasUsuarios()" style="margin-top: 20px;">Cargar Más Usuarios</button>
     </div>
     
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-    const filtersForm = document.getElementById('filters-form');
-    const usersContainer = document.getElementById('users-container');
-    const cargarMasUsuariosBtn = document.getElementById('cargar-mas-usuarios');
+        // Función global para realizar acciones
+        async function realizarAccion(action, userId) {
+    console.log(`[DEBUG] Ejecutando acción: ${action} para el usuario: ${userId}`);
+    try {
+        const body = { action, user_id: userId };
 
-    // Función reutilizable para realizar solicitudes al backend
-    async function fetchData(url, method = 'POST', body = null, headers = {}) {
-        try {
-            const response = await fetch(url, { method, headers, body });
-            if (!response.ok) {
-                throw new Error(`Error HTTP: ${response.status}`);
-            }
-            const data = await response.json();
-            console.log(`[DEBUG] Respuesta recibida del backend (${url}):`, data);
-            return data;
-        } catch (error) {
-            console.error(`[DEBUG] Error en la solicitud a ${url}:`, error);
-            throw error;
-        }
-    }
-
-    // Manejar el envío del formulario de filtros
-    if (filtersForm) {
-        filtersForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const formData = new FormData(filtersForm);
-
-            console.log("[DEBUG] Enviando filtros al backend:", Object.fromEntries(formData));
-
-            try {
-                const data = await fetchData('/aplicar_filtros', 'POST', formData);
-
-                usersContainer.innerHTML = ""; // Limpiar el contenedor
-
-                if (data.success) {
-                    // Mostrar usuarios que cumplen los filtros
-                    if (data.users.length > 0) {
-                        data.users.forEach(user => {
-                            const userCard = crearUserCard(user);
-                            usersContainer.appendChild(userCard);
-                        });
-                    } else {
-                        usersContainer.innerHTML += "<p>No se encontraron usuarios que cumplan los filtros.</p>";
-                    }
-
-                    // Mostrar errores
-                    if (data.errors.length > 0) {
-                        data.errors.forEach(errorUser => {
-                            const errorCard = crearErrorCard(errorUser);
-                            usersContainer.appendChild(errorCard);
-
-                            // Manejar error de bloqueo temporal de Instagram
-                            if (errorUser.error.includes("Please wait a few minutes before you try again")) {
-                                alert("Instagram está limitando las solicitudes. Intenta nuevamente más tarde.");
-                            }
-                        });
-                    }
-                } else {
-                    alert(`Error al aplicar filtros: ${data.error}`);
-                }
-            } catch (error) {
-                alert("Hubo un problema al aplicar los filtros. Revisa la consola para más detalles.");
-            }
+        const response = await fetch('/procesar_accion', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
         });
+
+        if (!response.ok) {
+            throw new Error(`Error HTTP: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.success) {
+            alert(`Acción '${action}' realizada con éxito para el usuario ${userId}`);
+        } else {
+            alert(`Error al realizar la acción '${action}': ${data.error}`);
+        }
+    } catch (error) {
+        console.error(`[DEBUG] Error al realizar la acción '${action}' para el usuario ${userId}:`, error);
+        alert("Hubo un problema al realizar la acción. Revisa la consola para más detalles.");
+    }
+}
+document.getElementById('realizar-acciones-lote').addEventListener('click', async () => {
+    const selectedActions = Array.from(document.querySelectorAll('#acciones-lote input[name="accion"]:checked'))
+        .map(input => input.value);
+
+    if (selectedActions.length === 0) {
+        alert('Por favor, selecciona al menos una acción.');
+        return;
     }
 
-    // Función para crear una tarjeta de usuario
-    function crearUserCard(user) {
-        console.log("[DEBUG] Creando tarjeta para el usuario:", user);
-        return `
-            <div class="user-card">
-                <h2>@${user.username}</h2>
-                <p><strong>Biografía:</strong> ${user.biography || 'Sin biografía disponible'}</p>
-                <p><strong>Seguidores:</strong> ${user.follower_count}</p>
-                <p><strong>Publicaciones:</strong> ${user.media_count}</p>
-            </div>
-        `;
+    const userCards = document.querySelectorAll('.user-card');
+    if (userCards.length === 0) {
+        alert('No hay usuarios disponibles para procesar.');
+        return;
     }
 
-    // Función para crear una tarjeta de error
-    function crearErrorCard(errorUser) {
-        console.log("[DEBUG] Creando tarjeta de error para el usuario:", errorUser);
-        return `
-            <div class="error-card">
-                <h2>Error en ID: ${errorUser.id}</h2>
-                <p><strong>Razón:</strong> ${errorUser.error || 'Sin especificar'}</p>
-            </div>
-        `;
+    const userIds = Array.from(userCards).map(card => card.dataset.userId);
+
+    try {
+        const response = await fetch('/procesar_acciones_lote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actions: selectedActions, user_ids: userIds }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error HTTP: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.success) {
+            alert('Acciones realizadas con éxito para todos los usuarios.');
+        } else {
+            alert(`Error al realizar las acciones: ${data.error}`);
+        }
+    } catch (error) {
+        console.error('Error al realizar acciones en lote:', error);
+        alert('Hubo un problema al realizar las acciones en lote. Revisa la consola para más detalles.');
     }
 });
 
 
+async function cargarMasUsuarios() {
+    const button = document.getElementById('cargar-mas-usuarios');
+    button.disabled = true;
+    button.innerText = 'Cargando...';
+
+    // Obtener las acciones seleccionadas
+    const selectedActions = Array.from(document.querySelectorAll('#acciones-lote input[name="accion"]:checked'))
+        .map(input => input.value);
+
+    if (selectedActions.length === 0) {
+        alert('Por favor, selecciona al menos una acción.');
+        button.disabled = false;
+        button.innerText = 'Cargar Más Usuarios';
+        return;
+    }
+
+    // Crear los datos a enviar al backend
+    const formData = new FormData(document.getElementById('filters-form'));
+    selectedActions.forEach(action => formData.append('acciones', action));
+
+    try {
+        const response = await fetch('/cargar_mas_usuarios', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error HTTP: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.success) {
+            data.users.forEach(user => {
+                const userCard = crearUserCard(user);
+                document.getElementById('users-container').innerHTML += userCard;
+            });
+            if (data.errors.length > 0) {
+                console.warn('Errores durante las acciones:', data.errors);
+            }
+        } else {
+            alert(data.error);
+        }
+    } catch (error) {
+        console.error('Error al cargar más usuarios:', error);
+        alert('Hubo un error al cargar más usuarios.');
+    }
+
+    button.disabled = false;
+    button.innerText = 'Cargar Más Usuarios';
+}
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const filtersForm = document.getElementById('filters-form');
+            const usersContainer = document.getElementById('users-container');
+
+            // Manejar el envío del formulario de filtros
+            if (filtersForm) {
+                filtersForm.addEventListener('submit', async (event) => {
+                    event.preventDefault();
+                    const formData = new FormData(filtersForm);
+
+                    console.log("[DEBUG] Enviando filtros al backend:", Object.fromEntries(formData));
+
+                    try {
+                        const response = await fetch('/aplicar_filtros', {
+                            method: 'POST',
+                            body: formData,
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`Error HTTP: ${response.status}`);
+                        }
+
+                        const data = await response.json();
+
+                        usersContainer.innerHTML = ""; // Limpiar el contenedor
+
+                        if (data.success) {
+                            if (data.users.length > 0) {
+                                data.users.forEach(user => {
+                                    const userCard = crearUserCard(user);
+                                    usersContainer.innerHTML += userCard;
+                                });
+                            } else {
+                                usersContainer.innerHTML += "<p>No se encontraron usuarios que cumplan los filtros.</p>";
+                            }
+
+                            if (data.errors.length > 0) {
+                                data.errors.forEach(errorUser => {
+                                    const errorCard = crearErrorCard(errorUser);
+                                    usersContainer.innerHTML += errorCard;
+
+                                    if (errorUser.error.includes("Please wait a few minutes before you try again")) {
+                                        alert("Instagram está limitando las solicitudes. Intenta nuevamente más tarde.");
+                                    }
+                                });
+                            }
+                        } else {
+                            alert(`Error al aplicar filtros: ${data.error}`);
+                        }
+                    } catch (error) {
+                        alert("Hubo un problema al aplicar los filtros. Revisa la consola para más detalles.");
+                    }
+                });
+            }
+
+            function crearUserCard(user) {
+                return `
+                    <div class="user-card">
+                        <h2>@${user.username}</h2>
+                        <p><strong>Biografía:</strong> ${user.biography || 'Sin biografía disponible'}</p>
+                        <p><strong>Seguidores:</strong> ${user.follower_count}</p>
+                        <p><strong>Publicaciones:</strong> ${user.media_count}</p>
+                        <button onclick="realizarAccion('follow', '${user.id}')">Seguir</button>
+                        <button onclick="realizarAccion('dm', '${user.id}')">Enviar DM</button>
+                        <button onclick="realizarAccion('comment', '${user.id}')">Comentar Publicación</button>
+                        <button onclick="realizarAccion('like', '${user.id}')">Dar Me Gusta</button>
+                        <button onclick="realizarAccion('view_story', '${user.id}')">Ver Historias</button>
+                    </div>
+                `;
+            }
+
+            document.getElementById('filters-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    const formData = new FormData(event.target);
+    const selectedActions = Array.from(document.querySelectorAll('#acciones-lote input[name="accion"]:checked'))
+        .map(input => input.value);
+
+    if (selectedActions.length === 0) {
+        alert('Por favor, selecciona al menos una acción.');
+        return;
+    }
+
+    try {
+        // Enviar los filtros al backend
+        const response = await fetch('/aplicar_filtros', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error HTTP: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+            const userIds = data.users.map(user => user.id); // IDs de los usuarios filtrados
+
+            // Enviar las acciones seleccionadas y los IDs al backend
+            const actionsResponse = await fetch('/procesar_acciones_lote', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ actions: selectedActions, user_ids: userIds }),
+            });
+
+            if (!actionsResponse.ok) {
+                throw new Error(`Error HTTP: ${actionsResponse.status}`);
+            }
+
+            const actionsData = await actionsResponse.json();
+            if (actionsData.success) {
+                alert('Acciones realizadas con éxito para los usuarios filtrados.');
+            } else {
+                alert(`Error al realizar las acciones: ${actionsData.error}`);
+            }
+        } else {
+            alert(`Error al aplicar filtros: ${data.error}`);
+        }
+    } catch (error) {
+        console.error('Error al aplicar filtros o realizar acciones:', error);
+        alert('Hubo un problema al aplicar los filtros o realizar las acciones. Revisa la consola para más detalles.');
+    }
+});
+
+
+            function crearErrorCard(errorUser) {
+                return `
+                    <div class="error-card">
+                        <h2>Error en ID: ${errorUser.id}</h2>
+                        <p><strong>Razón:</strong> ${errorUser.error || 'Sin especificar'}</p>
+                    </div>
+                `;
+            }
+        });
     </script>
 </body>
 </html>

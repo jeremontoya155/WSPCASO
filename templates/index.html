@@ -3,20 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<<<<<<< HEAD
-    <title>Instagram Bot</title>
-=======
     <title>Inicio de Sesión - Instagram Bot</title>
->>>>>>> 3f8b5aa (mejoras)
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
     <div class="container">
-<<<<<<< HEAD
-        <h1>Instagram Bot</h1>
-
-        <form action="/logout" method="POST" style="margin-top: 10px; text-align: center;">
-=======
         <h1>Inicia Sesión</h1>
 
         <!-- Formulario de inicio de sesión -->
@@ -43,94 +34,10 @@
 
         <!-- Formulario para cerrar sesión -->
         <form action="/logout" method="POST" style="margin-top: 20px; text-align: center;">
->>>>>>> 3f8b5aa (mejoras)
             <button id="boton-cerrar-sesion" class="logout-btn" style="background-color: #f44336; color: white; padding: 5px 10px; font-size: 12px; border: none; border-radius: 5px; cursor: pointer; width: 100px;">
                 Cerrar sesión
             </button>
         </form>
-<<<<<<< HEAD
- 
-        <form id="bot-form" action="/bot" method="POST">
-            <label for="username">Usuario de Instagram:</label>
-            <input type="text" id="username" name="username" required>
-        
-            <label for="password">Contraseña:</label>
-            <input type="password" id="password" name="password" required>
-        
-            <label for="competencia">Cuentas de competencia (separadas por comas):</label>
-            <input type="text" id="competencia" name="competencia" required>
-
-    
-            <h2>Configura los Filtros para Seguir Usuarios</h2>
-        
-            <label for="ubicaciones">Ubicaciones:</label>
-            <input type="text" id="ubicaciones" name="ubicaciones" placeholder="Ej: chile, santiago">
-        
-            <label for="palabras_clave">Palabras clave en la biografía:</label>
-            <input type="text" id="palabras_clave" name="palabras_clave" placeholder="Ej: emprendedor, marketing">
-        
-            <label for="min_publicaciones">Mínimo de Publicaciones:</label>
-            <input type="number" id="min_publicaciones" name="min_publicaciones" value="50">
-        
-            <label for="min_seguidores">Mínimo de Seguidores:</label>
-            <input type="number" id="min_seguidores" name="min_seguidores" value="500">
-        
-            <label for="tipo_cuenta">Tipo de Cuenta:</label>
-            <select id="tipo_cuenta" name="tipo_cuenta">
-                <option value="publica">Pública</option>
-                <option value="privada">Privada</option>
-            </select>
-        
-            <button type="submit">Enviar</button>
-        </form>
-        
-
-        <!-- Log de Mensajes -->
-        {% if success %}
-        <p style="color: #00ffc3; font-size: 14px; margin-top: 20px;">{{ success }}</p>
-        {% endif %}
-        {% if error %}
-        <p style="color: #ff0033; font-size: 14px; margin-top: 20px;">{{ error }}</p>
-        {% endif %}
-    
-        {% if log %}
-        <div class="log">
-            <h2>Log de Mensajes Enviados:</h2>
-            <ul>
-                {% for entry in log %}
-                <li>
-                    <strong style="color: #00ffc3;">@{{ entry.username }}</strong>: {{ entry.mensaje }}
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-    
-
-
-<!-- Formulario para ingresar el código 2FA -->
-<div id="form-2fa" style="display: none; margin-top: 20px;">
-    <h2>Ingrese el código de autenticación</h2>
-    <form id="2fa-form">
-        <label for="2fa-code">Código 2FA:</label>
-        <input type="text" id="2fa-code" name="code" required>
-        <button type="submit">Enviar Código</button>
-    </form>
-</div>
-
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-    const botForm = document.getElementById('bot-form');
-    const twoFaForm = document.getElementById('form-2fa-form'); // Cambiado para seleccionar el formulario interno
-
-    // Manejo del formulario principal (inicio de sesión en Instagram)
-    botForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-
-        try {
-            const formData = new FormData(botForm); // Debe ser un formulario válido
-            const response = await fetch('/bot', {
-=======
 
         <!-- Mensajes del backend -->
         {% if error %}
@@ -151,22 +58,11 @@
 
         try {
             const response = await fetch('/instagram-login', {
->>>>>>> 3f8b5aa (mejoras)
                 method: 'POST',
                 body: formData,
             });
 
             const data = await response.json();
-<<<<<<< HEAD
-            console.log("Respuesta del backend:", data);
-
-            if (data["2fa_required"]) {
-                alert(data.message);
-                document.getElementById('form-2fa').style.display = 'block'; // Mostrar formulario de 2FA
-            } else if (data.message) {
-                alert(data.message);
-            } else if (data.error) {
-=======
             console.log("[DEBUG] Respuesta del backend:", data);
 
             if (data["2fa_required"]) {
@@ -176,40 +72,10 @@
                 alert(data.message);
                 window.location.href = data.redirect; // Redirigir a /acciones
             } else {
->>>>>>> 3f8b5aa (mejoras)
                 alert(`Error: ${data.error}`);
             }
         } catch (error) {
             console.error("Error en la solicitud:", error);
-<<<<<<< HEAD
-            alert("Hubo un problema con la solicitud. Por favor, inténtalo de nuevo.");
-        }
-    });
-
-    // Manejo del formulario de 2FA
-    twoFaForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-
-        try {
-            const formData = new FormData(twoFaForm); // Debe ser el formulario interno del 2FA
-            const response = await fetch('/verify-2fa', {
-                method: 'POST',
-                body: formData,
-            });
-
-            const data = await response.json();
-            console.log("Respuesta del backend (2FA):", data);
-
-            if (data.message) {
-                alert(data.message);
-                document.getElementById('form-2fa').style.display = 'none'; // Ocultar formulario de 2FA
-            } else if (data.error) {
-                alert(`Error: ${data.error}`);
-            }
-        } catch (error) {
-            console.error("Error en la solicitud:", error);
-            alert("Hubo un problema con la solicitud. Por favor, inténtalo de nuevo.");
-=======
             alert("Hubo un problema al iniciar sesión. Por favor, inténtalo de nuevo.");
         }
     });
@@ -239,19 +105,11 @@
         } catch (error) {
             console.error("Error en la solicitud de 2FA:", error);
             alert("Hubo un problema con la autenticación 2FA.");
->>>>>>> 3f8b5aa (mejoras)
         }
     });
 });
 
-<<<<<<< HEAD
-</script>
-
-
-
-=======
     </script>
     
->>>>>>> 3f8b5aa (mejoras)
 </body>
 </html>
