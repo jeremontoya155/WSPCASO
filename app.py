@@ -334,44 +334,32 @@ def acciones():
 @app.route('/procesar_accion', methods=['POST'])
 def procesar_accion():
     try:
-        print("[DEBUG] Iniciando la función /procesar_accion")
         data = request.get_json()
-        print(f"[DEBUG] Datos recibidos: {data}")
+        user_id = data.get("user_id")
+        action = data.get("action")
 
-        user_id = data.get('user_id')  # ID del usuario
-        action = data.get('action')   # Acción solicitada
-
-        # Validar parámetros obligatorios
         if not user_id or not action:
-            print("[DEBUG] Faltan parámetros obligatorios.")
-            return jsonify({"success": False, "error": "Faltan parámetros obligatorios (user_id, action)."}), 400
+            return jsonify({"success": False, "error": "Faltan datos para procesar la acción."}), 400
 
-        print(f"[DEBUG] Ejecutando acción '{action}' para el usuario {user_id}")
-
-        # Validar y ejecutar la acción correspondiente
-        if action == "like":
-            dar_me_gusta_a_publicaciones(user_id)
-        elif action == "comment":
-            comentario = data.get('comment', 'Comentario automático')
-            comentar_publicacion(user_id, comentario)
+        mensaje_generado = ""
+        if action == "comment":
+            mensaje_generado = generar_mensaje_ia("usuario", "biografía")  # Ajusta según tu lógica
+            comentar_publicacion(user_id, mensaje_generado)
         elif action == "dm":
-            mensaje = "Hola, gracias por seguirme. 😊"  # Mensaje predeterminado
-            enviar_dm(user_id, mensaje)
+            mensaje_generado = generar_mensaje_ia("usuario", "biografía")
+            enviar_dm(user_id, mensaje_generado)
         elif action == "follow":
             seguir_usuario(user_id)
+        elif action == "like":
+            dar_me_gusta_a_publicaciones(user_id)
         elif action == "view_story":
             ver_historias(user_id)
-        else:
-            print(f"[DEBUG] Acción no reconocida: {action}")
-            return jsonify({"success": False, "error": "Acción no reconocida."}), 400
 
-        # Responder con éxito
-        return jsonify({"success": True, "message": f"Acción '{action}' realizada con éxito para el usuario {user_id}."})
-
+        return jsonify({"success": True, "message": mensaje_generado})
     except Exception as e:
-        # Manejo de errores
-        print(f"[DEBUG] Error al procesar la acción: {e}")
-        return jsonify({"success": False, "error": f"Error interno: {str(e)}"}), 500
+        print(f"[ERROR] {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
     
 @app.route('/aplicar_filtros', methods=['POST'])
 def aplicar_filtros():
@@ -381,14 +369,7 @@ def aplicar_filtros():
         # Obtener y procesar los datos enviados desde el formulario
         competencias = request.form.get('competidores', '').split(',')
         competencias = [c.strip() for c in competencias if c.strip()]
-        filtros = {
-            "ubicaciones": [u.strip().lower() for u in request.form.get('ubicaciones', '').split(',') if u.strip()],
-            "palabras_clave": [p.strip().lower() for p in request.form.get('palabras_clave', '').split(',') if p.strip()],
-            "min_publicaciones": int(request.form.get('min_publicaciones', 0)),
-            "min_seguidores": int(request.form.get('min_seguidores', 0)),
-            "tipo_cuenta": request.form.get('tipo_cuenta', 'publica').lower(),
-        }
-
+        
         usuarios_filtrados = []
         usuarios_con_errores = []
 
@@ -398,7 +379,6 @@ def aplicar_filtros():
             return jsonify({"success": False, "error": "Debes proporcionar al menos una competencia válida."}), 400
 
         print(f"[DEBUG] Competencias recibidas: {competencias}")
-        print(f"[DEBUG] Filtros enviados: {filtros}")
 
         # Procesar cada competencia
         for competencia in competencias:
@@ -409,28 +389,10 @@ def aplicar_filtros():
 
                 for seguidor_id in seguidores_ids:
                     try:
-                        info = obtener_informacion_usuario(seguidor_id)
-
-                        # Manejar usuarios con errores
-                        if "error" in info:
-                            print(f"[DEBUG] Usuario procesado con información parcial: {info}")
-                            usuarios_con_errores.append({"id": seguidor_id, "error": "Información incompleta"})
-                            continue
-
-                        # Aplicar filtros
-                        if aplicar_filtros_individual(info, filtros):
-                            print(f"[DEBUG] Usuario {info['username']} pasa los filtros.")
-                            usuarios_filtrados.append({
-                                "id": seguidor_id,
-                                "username": info.get("username", "Usuario desconocido"),
-                                "biography": info.get("biography", "No disponible"),
-                                "follower_count": info.get("follower_count", 0),
-                                "media_count": info.get("media_count", 0),
-                                "is_private": info.get("is_private", False),
-                            })
-                        else:
-                            print(f"[DEBUG] Usuario {info['username']} no cumple los filtros.")
-                            usuarios_con_errores.append({"id": seguidor_id, "error": "No cumple los filtros"})
+                        # Aquí solo devolvemos el ID del usuario, no necesitamos más datos
+                        usuarios_filtrados.append({
+                            "id": seguidor_id
+                        })
                     except Exception as e:
                         print(f"[DEBUG] Error inesperado al procesar el usuario {seguidor_id}: {e}")
                         usuarios_con_errores.append({"id": seguidor_id, "error": str(e)})
@@ -445,24 +407,16 @@ def aplicar_filtros():
             for usuario in usuarios_filtrados:
                 for accion in acciones_seleccionadas:
                     try:
-                        if accion == "like":
-                            dar_me_gusta_a_publicaciones(usuario['id'])
-                        elif accion == "comment":
-                            comentario = generar_mensaje_ia(usuario['username'], usuario['biography'])
-                            comentar_publicacion(usuario['id'], comentario)
-                        elif accion == "dm":
-                            mensaje = generar_mensaje_ia(usuario['username'], usuario['biography'])
-                            enviar_dm(usuario['id'], mensaje)
-                        elif accion == "follow":
+                        # Aquí se pueden ejecutar las acciones necesarias para los IDs
+                        if accion == "follow":
                             seguir_usuario(usuario['id'])
                         elif accion == "view_story":
                             ver_historias(usuario['id'])
-                        print(f"✅ Acción '{accion}' realizada con éxito para el usuario {usuario['username']}.")
+                        print(f"✅ Acción '{accion}' realizada con éxito para el usuario ID: {usuario['id']}.")
                     except Exception as e:
-                        print(f"❌ Error al realizar la acción '{accion}' para el usuario {usuario['username']}: {e}")
+                        print(f"❌ Error al realizar la acción '{accion}' para el usuario ID: {usuario['id']}: {e}")
                         usuarios_con_errores.append({
                             "id": usuario['id'],
-                            "username": usuario['username'],
                             "action": accion,
                             "error": str(e),
                         })
@@ -481,162 +435,99 @@ def aplicar_filtros():
 
 def obtener_informacion_usuario(user_id):
     """
-    Obtiene información de un usuario de Instagram por su ID, manejando límites de solicitudes.
-
-    Args:
-        user_id (str): ID del usuario a consultar.
-
-    Returns:
-        dict: Información del usuario o un mensaje de error en caso de fallo.
+    Obtiene información de un usuario de Instagram por su ID y maneja errores.
     """
     try:
-        # Llamada a la API de Instagram para obtener información del usuario
         print(f"🔍 Obteniendo información del usuario {user_id}")
         user_info = cl.user_info(user_id)
-        
+
         # Retorna la información si la solicitud es exitosa
         return {
+            "id": user_id,
             "username": user_info.get("username", "No disponible"),
             "biography": user_info.get("biography", "No disponible"),
             "follower_count": user_info.get("follower_count", 0),
             "media_count": user_info.get("media_count", 0),
             "is_private": user_info.get("is_private", False),
         }
-    
+
+    except KeyError as ke:
+        # Si falta información clave, devolver solo el ID y un mensaje de error
+        print(f"❌ Error al obtener información del usuario {user_id}: {ke}")
+        return {
+            "id": user_id,
+            "username": "No disponible",
+            "error": f"Información incompleta: {str(ke)}"
+        }
+
     except Exception as e:
-        error_message = str(e)
-
-        # Si el error indica límite de solicitudes, realiza una pausa de 1 minuto
-        if "Please wait a few minutes before you try again" in error_message:
-            print(f"⚠️ Instagram está limitando las solicitudes. Pausando por 1 minuto...")
-            time.sleep(60)  # Pausa de 1 minuto
-
-            # Al finalizar la pausa, continúa con el siguiente perfil
-            print(f"🔄 Continuando con el siguiente perfil después de la espera")
-            return {"id": user_id, "error": "Limitación de solicitudes, continuando con el siguiente perfil"}
-        
-        else:
-            # Si ocurre otro error, lo registra y termina
-            print(f"❌ Error inesperado al procesar el usuario {user_id}: {e}")
-            return {"id": user_id, "error": error_message}
-
-
-
+        # Manejo genérico de otros errores
+        print(f"❌ Error inesperado al obtener información del usuario {user_id}: {e}")
+        return {
+            "id": user_id,
+            "username": "No disponible",
+            "error": "Error desconocido al procesar el usuario"
+        }
 @app.route('/procesar_acciones_lote', methods=['POST'])
 def procesar_acciones_lote():
     try:
         data = request.get_json()
-        actions = data.get('actions', [])
-        user_ids = data.get('user_ids', [])
+        acciones = data.get("actions", [])
+        user_ids = data.get("user_ids", [])
 
-        if not actions or not user_ids:
-            return jsonify({"success": False, "error": "Faltan acciones o usuarios."}), 400
+        if not acciones:
+            return jsonify({"success": False, "error": "No se seleccionaron acciones."}), 400
 
+        if not user_ids:
+            return jsonify({"success": False, "error": "No se enviaron IDs de usuarios."}), 400
+
+        errores = []
         for user_id in user_ids:
-            for action in actions:
-                if action == "like":
-                    dar_me_gusta_a_publicaciones(user_id)
-                elif action == "comment":
-                    comentarios = ["¡Gran contenido!", "¡Sigue así!", "¡Me encanta esta publicación!"]
-                    comentario = random.choice(comentarios)
-                    comentar_publicacion(user_id, comentario)
-                elif action == "dm":
-                    mensaje = "Hola, gracias por seguirme. 😊"
-                    enviar_dm(user_id, mensaje)
-                elif action == "follow":
-                    seguir_usuario(user_id)
-                elif action == "view_story":
-                    ver_historias(user_id)
+            for accion in acciones:
+                try:
+                    if accion == "follow":
+                        seguir_usuario(user_id)
+                    elif accion == "like":
+                        dar_me_gusta_a_publicaciones(user_id)
+                    elif accion == "comment":
+                        comentario = generar_mensaje_ia("", "")  # Personalizar si es necesario
+                        comentar_publicacion(user_id, comentario)
+                    elif accion == "dm":
+                        mensaje = generar_mensaje_ia("", "")  # Personalizar si es necesario
+                        enviar_dm(user_id, mensaje)
+                    elif accion == "view_story":
+                        ver_historias(user_id)
+                except Exception as e:
+                    errores.append({"id": user_id, "action": accion, "error": str(e)})
 
-        return jsonify({"success": True, "message": "Acciones realizadas con éxito."})
+        if errores:
+            return jsonify({"success": False, "error": "Algunas acciones fallaron.", "details": errores}), 207
+
+        return jsonify({"success": True})
     except Exception as e:
-        print(f"Error al procesar acciones en lote: {e}")
+        print(f"[ERROR] {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
 
 @app.route('/cargar_mas_usuarios', methods=['POST'])
 def cargar_mas_usuarios():
     try:
         competencia = request.form.get('competencia')
+        processed_ids = request.form.getlist('processed_ids[]')  # Recibir los IDs procesados
+
         if not competencia:
             return jsonify({"success": False, "error": "No se proporcionó una cuenta de competencia."})
 
-        filtros = {
-            "ubicaciones": request.form.get('ubicaciones', '').split(','),
-            "palabras_clave": request.form.get('palabras_clave', '').split(','),
-            "min_publicaciones": int(request.form.get('min_publicaciones', 0)),
-            "min_seguidores": int(request.form.get('min_seguidores', 0)),
-            "tipo_cuenta": request.form.get('tipo_cuenta', 'publica'),
-        }
-
-        acciones_seleccionadas = request.form.getlist('acciones')
-        if not acciones_seleccionadas:
-            return jsonify({"success": False, "error": "No se seleccionaron acciones."})
-
-        usuarios_filtrados = []
-        usuarios_con_errores = []
-        cantidad_procesada = 0
-        cantidad_necesaria = 5
-
-        while len(usuarios_filtrados) < cantidad_necesaria and cantidad_procesada < 100:
-            seguidores_ids = obtener_seguidores_de_competencia(competencia, cantidad=10)
-            cantidad_procesada += len(seguidores_ids)
-
-            for seguidor_id in seguidores_ids:
-                try:
-                    info = cl.user_info(seguidor_id)
-                    usuario = {
-                        "id": seguidor_id,
-                        "username": info.username,
-                        "biography": info.biography or "Sin biografía",
-                        "follower_count": info.follower_count,
-                        "media_count": info.media_count,
-                        "is_private": info.is_private,
-                    }
-
-                    if aplicar_filtros_individual(usuario, filtros):
-                        usuarios_filtrados.append(usuario)
-
-                        # Aplicar acciones seleccionadas al usuario
-                        for accion in acciones_seleccionadas:
-                            try:
-                                if accion == "like":
-                                    dar_me_gusta_a_publicaciones(usuario['id'])
-                                elif accion == "comment":
-                                    comentario = generar_mensaje_ia(usuario['username'], usuario['biography'])
-                                    comentar_publicacion(usuario['id'], comentario)
-                                elif accion == "dm":
-                                    mensaje = generar_mensaje_ia(usuario['username'], usuario['biography'])
-                                    enviar_dm(usuario['id'], mensaje)
-                                elif accion == "follow":
-                                    seguir_usuario(usuario['id'])
-                                elif accion == "view_story":
-                                    ver_historias(usuario['id'])
-                                print(f"✅ Acción '{accion}' realizada con éxito para el usuario {usuario['username']}.")
-                            except Exception as e:
-                                print(f"❌ Error al realizar la acción '{accion}' para el usuario {usuario['username']}: {e}")
-                                usuarios_con_errores.append({
-                                    "id": usuario['id'],
-                                    "username": usuario['username'],
-                                    "action": accion,
-                                    "error": str(e),
-                                })
-
-                        if len(usuarios_filtrados) >= cantidad_necesaria:
-                            break
-                except Exception as e:
-                    print(f"[DEBUG] Error al procesar usuario {seguidor_id}: {e}")
-                    usuarios_con_errores.append({"id": seguidor_id, "error": str(e)})
+        seguidores_ids = obtener_seguidores_de_competencia(competencia, cantidad=50)
+        nuevos_ids = [id_ for id_ in seguidores_ids if str(id_) not in processed_ids]
 
         return jsonify({
             "success": True,
-            "users": usuarios_filtrados,
-            "errors": usuarios_con_errores,
+            "users": [{"id": id_} for id_ in nuevos_ids],
         })
-
     except Exception as e:
         print(f"[DEBUG] Error al cargar más usuarios: {e}")
         return jsonify({"success": False, "error": str(e)})
-
 
 if __name__ == "__main__":
     print("Iniciando la aplicación Flask...")

@@ -46,7 +46,7 @@ def generar_mensaje_ia(username, bio=None, intereses=None, ultima_publicacion=No
         return "Error de conexión con OpenAI."
     except Exception as e:
         print(f"❌ Error inesperado: {e}")
-        return "Error desconocido al generar el mensaje."
+        return ""
 
 
 def extraer_nombre_apodo(username, bio):

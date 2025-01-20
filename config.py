@@ -39,15 +39,21 @@ def make_celery(app):
     celery.conf.update(app.config)
     return celery
 
-# Cargar el proxy desde las variables de entorno
+# Configuración de proxy (solo si es necesario)
+PROXY = os.getenv("PROXY")  # Leer la variable PROXY del archivo .env
 PROXIES = {
-    "http": os.getenv("PROXY_HTTP"),
-    "https": os.getenv("PROXY_HTTPS")
+    "http": PROXY,
+    "https": PROXY
+} if PROXY else None  # Si no hay proxy, asigna None
+
+# Headers para simular un navegador y evitar bloqueos
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 }
 
-# Verificar que los proxies fueron cargados correctamente
-print("Proxies cargados:", PROXIES)
-
-# Probar la conexión a Instagram usando el proxy
-response = requests.get("https://www.instagram.com", proxies=PROXIES)
-print(response.status_code)
+try:
+    print("Realizando solicitud sin proxy...")
+    response = requests.get("https://www.instagram.com", headers=headers)
+    print("Estado de la respuesta:", response.status_code)
+except Exception as e:
+    print("Error al realizar la solicitud:", e)

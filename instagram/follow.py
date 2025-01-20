@@ -38,6 +38,9 @@ def verificar_limite_accion(accion):
 
 # Funciones principales de acciones
 def dar_me_gusta_a_publicaciones(user_id):
+    if not user_id:
+        print("❌ Error: ID de usuario no válido para dar 'me gusta'.")
+        return
     try:
         publicaciones = cl.user_medias(user_id, amount=1)
         if publicaciones:
@@ -45,11 +48,16 @@ def dar_me_gusta_a_publicaciones(user_id):
             cl.media_like(publicacion_id)
             registrar_accion(user_id, "me_gusta", {"publicacion_id": publicacion_id})
             print(f"✅ 'Me gusta' dado a la publicación {publicacion_id}.")
+        else:
+            print(f"❌ No se encontraron publicaciones para el usuario {user_id}.")
     except Exception as e:
-        print(f"❌ Error al dar 'me gusta': {e}")
+        print(f"❌ Error al dar 'me gusta' al usuario {user_id}: {e}")
+
 
 def comentar_publicacion(user_id, username=None, bio=None):
-    """Comenta una publicación de un usuario de Instagram con un mensaje personalizado."""
+    if not user_id:
+        print("❌ Error: ID de usuario no válido para comentar.")
+        return
     try:
         publicaciones = cl.user_medias(user_id, amount=1)
         if publicaciones:
@@ -58,46 +66,41 @@ def comentar_publicacion(user_id, username=None, bio=None):
             cl.media_comment(publicacion_id, comentario)
             registrar_accion(user_id, "comentario", {"publicacion_id": publicacion_id, "comentario": comentario})
             print(f"✅ Comentario realizado en la publicación {publicacion_id}: {comentario}")
+        else:
+            print(f"❌ No se encontraron publicaciones para el usuario {user_id}.")
     except Exception as e:
-        print(f"❌ Error al comentar: {e}")
+        print(f"❌ Error al comentar en la publicación del usuario {user_id}: {e}")
 
 
 def enviar_dm(user_id, username=None, bio=None):
-    """Envía un mensaje directo (DM) personalizado a un usuario de Instagram."""
+    if not user_id:
+        print("❌ Error: ID de usuario no válido para enviar DM.")
+        return
     try:
         mensaje = generar_mensaje_personalizado(username, bio)
         cl.direct_send(mensaje, [user_id])
         registrar_accion(user_id, "dm", {"mensaje": mensaje})
         print(f"✅ Mensaje enviado a {user_id}: {mensaje}")
     except Exception as e:
-        print(f"❌ Error al enviar DM: {e}")
+        print(f"❌ Error al enviar DM al usuario {user_id}: {e}")
 
 
 def generar_mensaje_personalizado(username, bio=None):
-    """Genera un mensaje personalizado comenzando por el nombre del usuario."""
     try:
-        # Intentar extraer el nombre a partir del username o biografía
         nombre, genero = extraer_nombre_apodo(username, bio)
+        nombre = nombre or username  # Si no hay nombre, usar el username.
 
-        # Si no hay un nombre, usar el username como fallback
-        if not nombre:
-            nombre = username
-
-        # Leer mensajes desde archivos TXT
         mensajes = leer_mensajes_desde_txt()
         if not mensajes:
-            mensajes = ["¡Hola! Espero que estés bien 😊."]
+            mensajes = ["Espero que estés bien 😊."]
 
-        # Seleccionar un mensaje aleatorio
         mensaje_aleatorio = random.choice(mensajes)
-
-        # Construir el mensaje personalizado
         mensaje_personalizado = f"{nombre}, {mensaje_aleatorio}"
         print(f"Mensaje personalizado generado: {mensaje_personalizado}")
         return mensaje_personalizado
     except Exception as e:
         print(f"❌ Error al generar mensaje personalizado: {e}")
-        return "¡Hola! Espero que estés bien 😊."
+        return "Espero que estés bien 😊."
 
 
 def leer_mensajes_desde_txt():
@@ -152,6 +155,9 @@ def seguir_usuario(user_id):
 
 
 def obtener_seguidores_de_competencia(username, cantidad=1):
+    if not username:
+        print("❌ Error: Username no válido para obtener seguidores.")
+        return []
     try:
         if not verificar_autenticacion():
             print("⚠️ Sesión no válida. Reautenticando...")
@@ -170,14 +176,18 @@ def obtener_seguidores_de_competencia(username, cantidad=1):
         print(f"❌ Error al obtener seguidores de {username}: {e}")
     return []
 
+
 def ver_historias(user_id):
+    if not user_id:
+        print("❌ Error: ID de usuario no válido para ver historias.")
+        return
     try:
-        historias = cl.user_stories(user_id)  # Obtener historias del usuario
+        historias = cl.user_stories(user_id)
         if historias:
             for historia in historias:
-                cl.story_view(historia.pk)  # Ver cada historia
-                print(f"✅ Historia vista: {historia.pk}")
+                cl.story_view(historia.pk)
                 registrar_accion(user_id, "view_story", {"story_id": historia.pk})
+                print(f"✅ Historia vista: {historia.pk}")
         else:
             print(f"❌ No se encontraron historias para el usuario {user_id}.")
     except Exception as e:
