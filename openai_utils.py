@@ -9,22 +9,16 @@ from instagrapi import Client
 openai.api_key = OPENAI_API_KEY
 cl = Client()
 # Mensajes predefinidos en caso de error o como alternativa
-MENSAJES_PREDEFINIDOS = [
-    "Hola, ¡me encanta tu contenido!",
-    "¡Qué gran trabajo estás haciendo!",
-    "Saludos, sigue creando cosas tan inspiradoras.",
-    "¡Tu perfil es muy interesante, felicidades!"
-]
 
 def generar_mensaje_ia(username, bio=None, intereses=None, ultima_publicacion=None):
     """
-    Genera un mensaje personalizado para un usuario.
+    Genera un mensaje personalizado utilizando la API de OpenAI.
     """
     try:
         # Construir el prompt
-        prompt = f"Genera un mensaje amigable para el usuario @{username}. {bio or ''} Intereses: {intereses or ''}. Última publicación: {ultima_publicacion or ''}."
+        prompt = f"Genera un mensaje amigable para el usuario @{username}. Biografía: {bio or 'No disponible'}. Intereses: {intereses or 'No especificados'}. Última publicación: {ultima_publicacion or 'No especificada'}."
 
-        # Realizar la solicitud a OpenAI
+        # Solicitar a OpenAI
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
@@ -32,66 +26,14 @@ def generar_mensaje_ia(username, bio=None, intereses=None, ultima_publicacion=No
             max_tokens=100
         )
         mensaje = response["choices"][0]["message"]["content"].strip()
-        print(f"Mensaje generado para @{username}: {mensaje}")
+        print(f"Mensaje generado por OpenAI: {mensaje}")
         return mensaje
 
-    except AuthenticationError:
-        print("❌ Error: Problema de autenticación con la API de OpenAI.")
-        return "Error de autenticación con la API."
-    except RateLimitError:
-        print("❌ Error: Límite de solicitudes alcanzado en la API de OpenAI.")
-        return "Límite de solicitudes alcanzado. Por favor, inténtalo más tarde."
-    except APIConnectionError:
-        print("❌ Error: No se pudo conectar con la API de OpenAI.")
-        return "Error de conexión con OpenAI."
     except Exception as e:
-        print(f"❌ Error inesperado: {e}")
-        return ""
+        print(f"❌ Error al generar mensaje con OpenAI: {e}")
+        return "Error al generar el mensaje con OpenAI."
 
 
-def extraer_nombre_apodo(username, bio):
-    """
-    Intenta extraer el nombre o apodo de la biografía del usuario.
-    Si no se encuentra un nombre, usa el username como referencia.
-    Además, intenta identificar el género basándose en el nombre.
-
-    Args:
-        username (str): Username del usuario de Instagram.
-        bio (str): Biografía del usuario.
-
-    Returns:
-        tuple: (nombre, genero), donde:
-            - nombre (str): Nombre o apodo extraído.
-            - genero (str): 'hombre', 'mujer' o 'desconocido'.
-    """
-    # Palabras clave comunes en biografías para nombres
-    posibles_nombres = bio.split() if bio else []
-
-    # Intentar identificar un nombre válido
-    nombre = None
-    for palabra in posibles_nombres:
-        if palabra.istitle():  # Palabra que comienza con mayúscula (posible nombre)
-            nombre = palabra
-            break
-
-    # Si no se encuentra nombre, usar el username
-    if not nombre:
-        nombre = username.split('_')[0].capitalize()
-
-    # Intentar identificar género usando Genderize
-    try:
-        genero = Genderize().get([nombre])[0]['gender']
-        if genero == 'male':
-            genero = 'hombre'
-        elif genero == 'female':
-            genero = 'mujer'
-        else:
-            genero = 'desconocido'
-    except Exception as e:
-        print(f"Error al intentar determinar género: {e}")
-        genero = 'desconocido'
-
-    return nombre, genero
 
 def enviar_mensaje_personalizado(user_id, username, bio=None, intereses=None, ultima_publicacion=None):
     """

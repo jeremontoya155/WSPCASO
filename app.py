@@ -1,10 +1,9 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, Response
 from flask_login import LoginManager, UserMixin, current_user, login_required, login_user
 from config import UPLOAD_FOLDER, LOG_FOLDER
-from database.models import collection_users, db
+from database.models import collection_users, collection_acciones
 from instagrapi import Client
-from instagram.follow import obtener_seguidores_de_competencia, seguir_usuario, dar_me_gusta_a_publicaciones, comentar_publicacion, enviar_dm, ver_historias
-from instagram.filters import aplicar_filtros_individual
+from instagram.follow import obtener_seguidores_de_competencia, seguir_usuario, dar_me_gusta_a_publicaciones, comentar_publicacion, enviar_dm, ver_historias, generar_mensaje_personalizado
 from instagram.session import autenticar_con_2fa
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
@@ -335,32 +334,30 @@ def acciones():
 def procesar_accion():
     try:
         data = request.get_json()
-        user_id = data.get("user_id")
+        user = data.get("user")  # Ahora recibimos los datos completos del usuario
         action = data.get("action")
 
-        if not user_id or not action:
+        if not user or not action:
             return jsonify({"success": False, "error": "Faltan datos para procesar la acción."}), 400
 
-        mensaje_generado = ""
         if action == "comment":
-            mensaje_generado = generar_mensaje_ia("usuario", "biografía")  # Ajusta según tu lógica
-            comentar_publicacion(user_id, mensaje_generado)
+            comentario = generar_mensaje_personalizado(user["username"], user.get("biography"))
+            comentar_publicacion(user["id"], comentario)
         elif action == "dm":
-            mensaje_generado = generar_mensaje_ia("usuario", "biografía")
-            enviar_dm(user_id, mensaje_generado)
+            mensaje = generar_mensaje_personalizado(user["username"], user.get("biography"))
+            enviar_dm(user["id"], mensaje)
         elif action == "follow":
-            seguir_usuario(user_id)
+            seguir_usuario(user["id"])
         elif action == "like":
-            dar_me_gusta_a_publicaciones(user_id)
+            dar_me_gusta_a_publicaciones(user["id"])
         elif action == "view_story":
-            ver_historias(user_id)
+            ver_historias(user["id"])
 
-        return jsonify({"success": True, "message": mensaje_generado})
+        return jsonify({"success": True, "message": f"Acción '{action}' realizada con éxito."})
     except Exception as e:
-        print(f"[ERROR] {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-    
+
 @app.route('/aplicar_filtros', methods=['POST'])
 def aplicar_filtros():
     try:
@@ -384,30 +381,30 @@ def aplicar_filtros():
         for competencia in competencias:
             print(f"[DEBUG] Procesando la competencia: {competencia}")
             try:
-                seguidores_ids = obtener_seguidores_de_competencia(competencia, cantidad=3)
-                print(f"[DEBUG] IDs de seguidores obtenidos para {competencia}: {seguidores_ids}")
+                # Obtener seguidores con información completa
+                seguidores_info = obtener_seguidores_de_competencia(competencia, cantidad=3)
+                print(f"[DEBUG] Información de seguidores obtenida para {competencia}: {seguidores_info}")
 
-                for seguidor_id in seguidores_ids:
-                    try:
-                        # Aquí solo devolvemos el ID del usuario, no necesitamos más datos
-                        usuarios_filtrados.append({
-                            "id": seguidor_id
-                        })
-                    except Exception as e:
-                        print(f"[DEBUG] Error inesperado al procesar el usuario {seguidor_id}: {e}")
-                        usuarios_con_errores.append({"id": seguidor_id, "error": str(e)})
+                # Agregar usuarios filtrados
+                usuarios_filtrados.extend(seguidores_info)
+
             except Exception as e:
                 print(f"[DEBUG] Error al obtener seguidores de la competencia {competencia}: {e}")
                 usuarios_con_errores.append({"competencia": competencia, "error": str(e)})
 
-        # Procesar acciones seleccionadas
+        # Validar si se encontraron usuarios
+        if not usuarios_filtrados:
+            print("[DEBUG] No se encontraron usuarios filtrados.")
+            return jsonify({"success": False, "error": "No se encontraron usuarios para las competencias proporcionadas."}), 404
+
+        # Procesar acciones seleccionadas (si las hay)
         acciones_seleccionadas = request.form.getlist('acciones')
         if acciones_seleccionadas:
             print(f"[DEBUG] Acciones seleccionadas: {acciones_seleccionadas}")
             for usuario in usuarios_filtrados:
                 for accion in acciones_seleccionadas:
                     try:
-                        # Aquí se pueden ejecutar las acciones necesarias para los IDs
+                        # Ejecutar acciones según el tipo
                         if accion == "follow":
                             seguir_usuario(usuario['id'])
                         elif accion == "view_story":
@@ -421,7 +418,7 @@ def aplicar_filtros():
                             "error": str(e),
                         })
 
-        # Devolver los resultados
+        # Construir la respuesta final
         return jsonify({
             "success": True,
             "users": usuarios_filtrados,
@@ -508,27 +505,51 @@ def procesar_acciones_lote():
         print(f"[ERROR] {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-
 @app.route('/cargar_mas_usuarios', methods=['POST'])
 def cargar_mas_usuarios():
+    competencia = request.form.get('competencia')
+    if not competencia:
+        return jsonify({"success": False, "error": "No se proporcionó una cuenta de competencia."})
+
     try:
-        competencia = request.form.get('competencia')
-        processed_ids = request.form.getlist('processed_ids[]')  # Recibir los IDs procesados
-
-        if not competencia:
-            return jsonify({"success": False, "error": "No se proporcionó una cuenta de competencia."})
-
-        seguidores_ids = obtener_seguidores_de_competencia(competencia, cantidad=50)
-        nuevos_ids = [id_ for id_ in seguidores_ids if str(id_) not in processed_ids]
-
-        return jsonify({
-            "success": True,
-            "users": [{"id": id_} for id_ in nuevos_ids],
-        })
+        usuarios = obtener_seguidores_de_competencia(competencia, cantidad=10)
+        return jsonify({"success": True, "users": usuarios})
     except Exception as e:
-        print(f"[DEBUG] Error al cargar más usuarios: {e}")
+        print(f"❌ Error al cargar más usuarios: {e}")
         return jsonify({"success": False, "error": str(e)})
+
+@app.route('/metrics', methods=['GET'])
+def get_metrics():
+    """
+    Devuelve métricas desglosadas por tipo de acción realizada.
+    """
+    try:
+        # Recuperar los conteos de cada acción desde la base de datos
+        acciones = {
+            "seguir_usuario": collection_acciones.count_documents({"accion": "seguir"}),
+            "dar_me_gusta_a_publicaciones": collection_acciones.count_documents({"accion": "me_gusta"}),
+            "comentar_publicacion": collection_acciones.count_documents({"accion": "comentario"}),
+            "enviar_dm": collection_acciones.count_documents({"accion": "dm"}),
+            "ver_historias": collection_acciones.count_documents({"accion": "view_story"})
+        }
+
+        # Estado del bot (puedes ajustarlo dinámicamente si es necesario)
+        estado_bot = "activo"
+
+        # Métricas finales
+        metrics = {
+            "acciones_realizadas": sum(acciones.values()),
+            "desglose_acciones": acciones,
+            "estado_bot": estado_bot
+        }
+
+        return jsonify(metrics)
+
+    except Exception as e:
+        print(f"❌ Error al generar métricas: {e}")
+        return jsonify({"error": "No se pudieron obtener las métricas."}), 500
 
 if __name__ == "__main__":
     print("Iniciando la aplicación Flask...")
     app.run(debug=True)
+

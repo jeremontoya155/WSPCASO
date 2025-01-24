@@ -5,8 +5,8 @@ from datetime import datetime
 from database.models import registrar_accion
 from instagram.session import cl
 from json.decoder import JSONDecodeError
-from openai_utils import extraer_nombre_apodo, enviar_mensaje_personalizado
-from instagram.session import autenticar_bot, reautenticar_sesion, verificar_autenticacion
+from openai_utils import generar_mensaje_ia, enviar_mensaje_personalizado
+from instagram.session import  reautenticar_sesion, verificar_autenticacion
 from instagrapi.exceptions import LoginRequired
 
 # Configuración de límites y horarios
@@ -19,7 +19,8 @@ HORA_INICIO = 9
 HORA_FIN = 23
 
 tiempo_pausa_prolongada = 3600  # 1 hora después de ciertas acciones
-UPLOAD_FOLDER = "./uploads"
+UPLOAD_FOLDER = "../mensajes/Hola como estas;.txt"
+UPLOAD_FOLDER = "../mensajes/primeros mensajes.txt"
 # Funciones auxiliares
 def delay_aleatorio(min_seg=30, max_seg=60):
     """Introduce un delay más largo para evitar bloqueos."""
@@ -54,7 +55,7 @@ def dar_me_gusta_a_publicaciones(user_id):
         print(f"❌ Error al dar 'me gusta' al usuario {user_id}: {e}")
 
 
-def comentar_publicacion(user_id, username=None, bio=None):
+def comentar_publicacion(user_id, username=None, bio=None, intereses=None, ultima_publicacion=None):
     if not user_id:
         print("❌ Error: ID de usuario no válido para comentar.")
         return
@@ -62,7 +63,7 @@ def comentar_publicacion(user_id, username=None, bio=None):
         publicaciones = cl.user_medias(user_id, amount=1)
         if publicaciones:
             publicacion_id = publicaciones[0].id
-            comentario = generar_mensaje_personalizado(username, bio)
+            comentario = generar_mensaje_personalizado(username, bio, intereses, ultima_publicacion)
             cl.media_comment(publicacion_id, comentario)
             registrar_accion(user_id, "comentario", {"publicacion_id": publicacion_id, "comentario": comentario})
             print(f"✅ Comentario realizado en la publicación {publicacion_id}: {comentario}")
@@ -72,12 +73,12 @@ def comentar_publicacion(user_id, username=None, bio=None):
         print(f"❌ Error al comentar en la publicación del usuario {user_id}: {e}")
 
 
-def enviar_dm(user_id, username=None, bio=None):
+def enviar_dm(user_id, username=None, bio=None, intereses=None, ultima_publicacion=None):
     if not user_id:
         print("❌ Error: ID de usuario no válido para enviar DM.")
         return
     try:
-        mensaje = generar_mensaje_personalizado(username, bio)
+        mensaje = generar_mensaje_personalizado(username, bio, intereses, ultima_publicacion)
         cl.direct_send(mensaje, [user_id])
         registrar_accion(user_id, "dm", {"mensaje": mensaje})
         print(f"✅ Mensaje enviado a {user_id}: {mensaje}")
@@ -85,26 +86,32 @@ def enviar_dm(user_id, username=None, bio=None):
         print(f"❌ Error al enviar DM al usuario {user_id}: {e}")
 
 
-def generar_mensaje_personalizado(username, bio=None):
+def generar_mensaje_personalizado(username, bio=None, intereses=None, ultima_publicacion=None):
+    """
+    Genera un mensaje personalizado para un usuario utilizando mensajes de TXT y la IA de OpenAI.
+    """
     try:
-        nombre, genero = extraer_nombre_apodo(username, bio)
-        nombre = nombre or username  # Si no hay nombre, usar el username.
+        # Leer mensajes desde los archivos TXT
+        mensajes_txt = leer_mensajes_desde_txt()
+        mensaje_txt = random.choice(mensajes_txt) if mensajes_txt else ""
 
-        mensajes = leer_mensajes_desde_txt()
-        if not mensajes:
-            mensajes = ["Espero que estés bien 😊."]
+        # Generar mensaje desde OpenAI
+        mensaje_ia = generar_mensaje_ia(username, bio, intereses, ultima_publicacion)
 
-        mensaje_aleatorio = random.choice(mensajes)
-        mensaje_personalizado = f"{nombre}, {mensaje_aleatorio}"
+        # Combinar ambos mensajes
+        mensaje_personalizado = f"{mensaje_txt} {mensaje_ia}".strip()
         print(f"Mensaje personalizado generado: {mensaje_personalizado}")
         return mensaje_personalizado
+
     except Exception as e:
         print(f"❌ Error al generar mensaje personalizado: {e}")
-        return "Espero que estés bien 😊."
+        return "Hubo un error al generar el mensaje."
 
 
 def leer_mensajes_desde_txt():
-    """Lee los mensajes desde los archivos TXT en la carpeta configurada."""
+    """
+    Lee los mensajes desde los archivos TXT en la carpeta configurada.
+    """
     mensajes = []
     try:
         for archivo in os.listdir(UPLOAD_FOLDER):
@@ -114,8 +121,8 @@ def leer_mensajes_desde_txt():
                     mensajes.extend([linea.strip() for linea in f if linea.strip()])
         return mensajes
     except Exception as e:
-        print(f"Error al leer mensajes desde TXT: {e}")
-        return ["Espero que estés bien 😊."]
+        print(f"❌ Error al leer mensajes desde TXT: {e}")
+        return []
 
 
 # Función genérica para ejecutar acciones
@@ -154,7 +161,20 @@ def seguir_usuario(user_id):
         print(f"❌ Error al seguir al usuario {user_id}: {e}")
 
 
-def obtener_seguidores_de_competencia(username, cantidad=1):
+def obtener_seguidores_de_competencia(username, cantidad=3, pausa_min=1, pausa_max=3):
+    """
+    Obtiene la información completa (o parcial) de los seguidores de un usuario de competencia,
+    con pausas aleatorias entre las solicitudes.
+    
+    Args:
+        username (str): Nombre de usuario de la competencia.
+        cantidad (int): Cantidad de seguidores a obtener.
+        pausa_min (int): Tiempo mínimo de pausa entre solicitudes (en segundos).
+        pausa_max (int): Tiempo máximo de pausa entre solicitudes (en segundos).
+    
+    Returns:
+        list: Lista de diccionarios con la información de los seguidores.
+    """
     if not username:
         print("❌ Error: Username no válido para obtener seguidores.")
         return []
@@ -167,14 +187,48 @@ def obtener_seguidores_de_competencia(username, cantidad=1):
         print(f"🔍 User ID obtenido para {username}: {user_id}")
 
         seguidores = cl.user_followers(user_id, amount=cantidad)
-        seguidores_ids = list(seguidores.keys())
-        print(f"✅ {len(seguidores_ids)} seguidores obtenidos de {username}.")
-        return seguidores_ids[:cantidad]
-    except JSONDecodeError as e:
-        print(f"❌ Error al decodificar JSON para {username}: {e}")
+        seguidores_info = []
+
+        for idx, follower_id in enumerate(seguidores.keys(), start=1):
+            try:
+                # Intentar obtener información completa del usuario
+                info = cl.user_info(follower_id)
+                seguidores_info.append({
+                    "id": follower_id,
+                    "username": info.username,
+                    "biography": info.biography or "",
+                    "follower_count": info.follower_count or 0,
+                    "media_count": info.media_count or 0,
+                    "is_private": info.is_private
+                })
+                print(f"✅ Información obtenida del seguidor {idx}/{cantidad}: {info.username}")
+
+            except Exception as e:
+                # En caso de error, agregar datos mínimos disponibles
+                print(f"❌ Error al obtener información completa del seguidor {follower_id}: {e}")
+                seguidores_info.append({
+                    "id": follower_id,
+                    "username": "Usuario desconocido",
+                    "biography": "No disponible",
+                    "follower_count": 0,
+                    "media_count": 0,
+                    "is_private": None
+                })
+
+            # Generar pausa aleatoria entre solicitudes
+            if idx < cantidad:  # No pausar después del último usuario
+                pausa = random.uniform(pausa_min, pausa_max)  # Generar pausa aleatoria
+                print(f"⏳ Pausando {pausa:.2f} segundos antes de la próxima solicitud...")
+                time.sleep(pausa)
+
+        print(f"✅ Información obtenida de {len(seguidores_info)} seguidores (completa o parcial).")
+        return seguidores_info
+
     except Exception as e:
         print(f"❌ Error al obtener seguidores de {username}: {e}")
-    return []
+        return []
+
+
 
 
 def ver_historias(user_id):

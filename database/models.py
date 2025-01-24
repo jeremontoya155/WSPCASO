@@ -36,9 +36,6 @@ try:
     collection_seguidos = db["seguidos"]
     collection_tokens = db["tokens"]
     collection_acciones = db["acciones_realizadas"]
-    collection_filtros = db["filters"]
-    collection_logs = db["logs"]
-    collection_sugerencias = db["sugerencias_diarias"]
     collection_mensajes = db["mensajes_enviados"]
     print("Colecciones configuradas correctamente.")
 except Exception as e:
