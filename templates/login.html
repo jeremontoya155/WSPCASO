@@ -8,7 +8,10 @@
 </head>
 <body>
     <div class="form-container">
-        <h1>Iniciar Sesión</h1>
+        <!-- Logo en lugar del título -->
+        <div class="logo-container">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo de la aplicación">
+        </div>
         {% if error %}
             <p class="error">{{ error }}</p>
         {% endif %}
@@ -19,7 +22,6 @@
             <input type="password" id="password" name="password" required>
             <button type="submit" class="btn">Ingresar</button>
         </form>
-        <p>¿No tienes una cuenta? <a href="/register">Regístrate aquí</a></p>
     </div>
 </body>
 </html>
