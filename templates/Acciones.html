@@ -24,6 +24,8 @@
     </style>
 </head>
 <body>
+
+
     <div class="container">
         <h1>Selecciona las Acciones</h1>
 
@@ -39,7 +41,14 @@
             </ul>
         </div>
         
-
+        <h2>Configurar Comportamiento de la IA</h2>
+        <label for="rol-ia">Selecciona el Rol de la IA:</label>
+        <select id="rol-ia" name="rol">
+            <option value="amigable">Amigable</option>
+            <option value="experto_negocios">Experto en Negocios</option>
+            <option value="técnico">Técnico</option>
+            <option value="motivador">Motivador</option>
+        </select>
 
         <!-- Formulario de Competidores y Filtros -->
         <form id="filters-form" style="margin-bottom: 20px;">
@@ -93,17 +102,19 @@
     </div>
     
     <script>
+        
         let processedUserIds = new Set(); // Almacena los IDs procesados
 
          let offset = 0; // Control del desplazamiento para cargar más usuarios
         const cantidadPorCarga = 10;
 
         function crearUserCard(user) {
-    console.log("[DEBUG] Usuario procesado:", user); // Agrega este log para confirmar las propiedades del usuario
+    console.log("[DEBUG] Usuario procesado:", user); // Verifica las propiedades del usuario en la consola
 
     return `
-        <div class="user-card" data-user-id="${user.id || "Sin ID"}">
+        <div class="user-card" data-username="${user.username || "Sin username"}" data-user-id="${user.id || "Sin ID"}">
             <h2>Usuario: ${user.username || "Sin nombre de usuario"}</h2>
+            <p>Nombre: ${user.full_name || "Sin nombre disponible"}</p>
             <p>Biografía: ${user.biography || "Sin biografía disponible"}</p>
             <p>Seguidores: ${user.follower_count !== undefined ? user.follower_count : "No disponible"}</p>
             <p>Publicaciones: ${user.media_count !== undefined ? user.media_count : "No disponible"}</p>
@@ -112,6 +123,23 @@
 }
 
 
+
+async function enviarMensajeAChatGPT(mensajeUsuario, rol) {
+    try {
+        const response = await fetch("/chatgpt", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ mensaje: mensajeUsuario, rol: rol }),
+        });
+        const datos = await response.json();
+        return datos.respuesta; // Respuesta generada por ChatGPT
+    } catch (error) {
+        console.error("Error al enviar el mensaje:", error);
+        return "Hubo un problema al procesar tu solicitud.";
+    }
+}
 
 
 
@@ -152,46 +180,57 @@
     }
 }
 
-
 document.getElementById('realizar-acciones-lote').addEventListener('click', async () => {
-        const selectedActions = Array.from(document.querySelectorAll('#acciones-lote input[name="accion"]:checked'))
-            .map(input => input.value);
+    // Obtener las acciones seleccionadas
+    const selectedActions = Array.from(document.querySelectorAll('#acciones-lote input[name="accion"]:checked'))
+        .map(input => input.value);
 
-        if (selectedActions.length === 0) {
-            alert('Por favor, selecciona al menos una acción.');
-            return;
+    // Validar que al menos haya una acción seleccionada
+    if (selectedActions.length === 0) {
+        alert('Por favor, selecciona al menos una acción.');
+        return;
+    }
+
+    // Obtener los nombres de usuario de las tarjetas
+    const userCards = document.querySelectorAll('.user-card');
+    if (userCards.length === 0) {
+        alert('No hay usuarios disponibles para procesar.');
+        return;
+    }
+
+    // Extraer los nombres de usuario
+    const usernames = Array.from(userCards).map(card => card.dataset.username);
+
+    try {
+        // Enviar la solicitud al backend
+        const response = await fetch('/procesar_acciones_lote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actions: selectedActions, usernames: usernames }),
+        });
+
+        // Manejar errores HTTP
+        if (!response.ok) {
+            throw new Error(`Error HTTP: ${response.status}`);
         }
 
-        const userCards = document.querySelectorAll('.user-card');
-        if (userCards.length === 0) {
-            alert('No hay usuarios disponibles para procesar.');
-            return;
-        }
-
-        const userIds = Array.from(userCards).map(card => card.dataset.userId);
-
-        try {
-            const response = await fetch('/procesar_acciones_lote', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ actions: selectedActions, user_ids: userIds }),
+        // Procesar la respuesta del backend
+        const data = await response.json();
+        if (data.success) {
+            alert('Acciones realizadas con éxito para todos los usuarios.');
+        } else {
+            const errores = data.resultados?.fallidos || [];
+            let mensajeError = 'Algunas acciones fallaron:\n';
+            errores.forEach(error => {
+                mensajeError += `Usuario: @${error.username}, Acción: ${error.accion}, Error: ${error.error}\n`;
             });
-
-            if (!response.ok) {
-                throw new Error(`Error HTTP: ${response.status}`);
-            }
-
-            const data = await response.json();
-            if (data.success) {
-                alert('Acciones realizadas con éxito para todos los usuarios.');
-            } else {
-                alert(`Error al realizar las acciones: ${data.error}`);
-            }
-        } catch (error) {
-            console.error('Error al realizar acciones en lote:', error);
-            alert('Hubo un problema al realizar las acciones en lote. Revisa la consola para más detalles.');
+            alert(mensajeError);
         }
-    });
+    } catch (error) {
+        console.error('Error al realizar acciones en lote:', error);
+        alert('Hubo un problema al realizar las acciones en lote. Revisa la consola para más detalles.');
+    }
+});
 
     async function cargarMasUsuarios() {
     const button = document.getElementById('cargar-mas-usuarios');
@@ -286,14 +325,15 @@ setInterval(actualizarMetricas, 10000);
 
 
 
-        
 document.getElementById('filters-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
+    event.preventDefault(); // Evita el envío por defecto del formulario
+
     const usersContainer = document.getElementById('users-container');
     usersContainer.innerHTML = ""; // Limpiar contenedor de usuarios
 
     const formData = new FormData(event.target);
     const competencia = formData.get('competidores');
+    const rol = document.getElementById('rol-ia').value; // Obtén el rol seleccionado
 
     if (!competencia || competencia.trim() === "") {
         alert("Debes ingresar al menos una cuenta de competencia.");
@@ -301,6 +341,9 @@ document.getElementById('filters-form').addEventListener('submit', async (event)
     }
 
     try {
+        // Agregar el rol a los datos del formulario antes de enviarlos
+        formData.append("rol", rol);
+
         const response = await fetch('/aplicar_filtros', {
             method: 'POST',
             body: formData,
@@ -326,6 +369,7 @@ document.getElementById('filters-form').addEventListener('submit', async (event)
         alert('Hubo un problema al aplicar los filtros.');
     }
 });
+
 
 
      

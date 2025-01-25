@@ -3,7 +3,7 @@ from flask_login import LoginManager, UserMixin, current_user, login_required, l
 from config import UPLOAD_FOLDER, LOG_FOLDER
 from database.models import collection_users, collection_acciones
 from instagrapi import Client
-from instagram.follow import obtener_seguidores_de_competencia, seguir_usuario, dar_me_gusta_a_publicaciones, comentar_publicacion, enviar_dm, ver_historias, generar_mensaje_personalizado
+from instagram.follow import obtener_seguidores_de_competencia, seguir_usuario, dar_me_gusta_a_publicaciones, comentar_publicacion, enviar_dm, ver_historias, generar_mensaje_combinado
 from instagram.session import autenticar_con_2fa
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
@@ -12,7 +12,7 @@ from json.decoder import JSONDecodeError
 from instagrapi.exceptions import LoginRequired, TwoFactorRequired
 import time
 from functools import wraps
-from openai_utils import generar_mensaje_ia
+from openai_utils import generar_mensaje_ia, detectar_genero
 
 
 
@@ -341,10 +341,10 @@ def procesar_accion():
             return jsonify({"success": False, "error": "Faltan datos para procesar la acción."}), 400
 
         if action == "comment":
-            comentario = generar_mensaje_personalizado(user["username"], user.get("biography"))
+            comentario = generar_mensaje_combinado(user["username"], user.get("biography"))
             comentar_publicacion(user["id"], comentario)
         elif action == "dm":
-            mensaje = generar_mensaje_personalizado(user["username"], user.get("biography"))
+            mensaje = generar_mensaje_combinado(user["username"], user.get("biography"))
             enviar_dm(user["id"], mensaje)
         elif action == "follow":
             seguir_usuario(user["id"])
@@ -377,6 +377,9 @@ def aplicar_filtros():
 
         print(f"[DEBUG] Competencias recibidas: {competencias}")
 
+        # Obtener el rol de ChatGPT desde el formulario
+        rol = request.form.get('rol', 'amigable')  # Rol por defecto
+
         # Procesar cada competencia
         for competencia in competencias:
             print(f"[DEBUG] Procesando la competencia: {competencia}")
@@ -385,49 +388,54 @@ def aplicar_filtros():
                 seguidores_info = obtener_seguidores_de_competencia(competencia, cantidad=3)
                 print(f"[DEBUG] Información de seguidores obtenida para {competencia}: {seguidores_info}")
 
-                # Agregar usuarios filtrados
+                # Agregar usuarios obtenidos (sin filtrar, como solicitas)
                 usuarios_filtrados.extend(seguidores_info)
 
             except Exception as e:
                 print(f"[DEBUG] Error al obtener seguidores de la competencia {competencia}: {e}")
                 usuarios_con_errores.append({"competencia": competencia, "error": str(e)})
 
-        # Validar si se encontraron usuarios
+        # Si no hay usuarios filtrados, devolver un mensaje pero continuar
         if not usuarios_filtrados:
-            print("[DEBUG] No se encontraron usuarios filtrados.")
-            return jsonify({"success": False, "error": "No se encontraron usuarios para las competencias proporcionadas."}), 404
+            print("[DEBUG] No se encontraron usuarios, pero se generará el flujo con usuarios vacíos.")
+            return jsonify({"success": True, "users": [], "errors": usuarios_con_errores})
 
-        # Procesar acciones seleccionadas (si las hay)
-        acciones_seleccionadas = request.form.getlist('acciones')
-        if acciones_seleccionadas:
-            print(f"[DEBUG] Acciones seleccionadas: {acciones_seleccionadas}")
-            for usuario in usuarios_filtrados:
-                for accion in acciones_seleccionadas:
-                    try:
-                        # Ejecutar acciones según el tipo
-                        if accion == "follow":
-                            seguir_usuario(usuario['id'])
-                        elif accion == "view_story":
-                            ver_historias(usuario['id'])
-                        print(f"✅ Acción '{accion}' realizada con éxito para el usuario ID: {usuario['id']}.")
-                    except Exception as e:
-                        print(f"❌ Error al realizar la acción '{accion}' para el usuario ID: {usuario['id']}: {e}")
-                        usuarios_con_errores.append({
-                            "id": usuario['id'],
-                            "action": accion,
-                            "error": str(e),
-                        })
+        # Generar mensajes con ChatGPT según el rol
+        usuarios_con_mensajes = []
+        for usuario in usuarios_filtrados:
+            try:
+                # Generar comentario personalizado con ChatGPT
+                comentario = generar_mensaje_ia(
+                    username=usuario["username"],
+                    bio=usuario.get("biography", "Sin biografía"),
+                    intereses=None,
+                    ultima_publicacion=None,
+                    rol=rol  # Aplicar el rol seleccionado
+                )
+                print(f"✅ Comentario generado para @{usuario['username']}: {comentario}")
+                
+                # Agregar usuario y comentario a la lista final
+                usuarios_con_mensajes.append({
+                    "username": usuario["username"],
+                    "biography": usuario.get("biography", "Sin biografía"),
+                    "follower_count": usuario.get("follower_count", 0),
+                    "comentario": comentario
+                })
+            except Exception as e:
+                print(f"❌ Error al generar comentario para @{usuario['username']}: {e}")
+                usuarios_con_errores.append({"username": usuario["username"], "error": str(e)})
 
         # Construir la respuesta final
         return jsonify({
             "success": True,
-            "users": usuarios_filtrados,
+            "users": usuarios_con_mensajes,
             "errors": usuarios_con_errores,
         })
 
     except Exception as e:
         print(f"[DEBUG] Error inesperado en aplicar_filtros: {e}")
         return jsonify({"success": False, "error": f"Error inesperado: {str(e)}"}), 500
+
 
 
 def obtener_informacion_usuario(user_id):
@@ -468,55 +476,46 @@ def obtener_informacion_usuario(user_id):
 @app.route('/procesar_acciones_lote', methods=['POST'])
 def procesar_acciones_lote():
     try:
+        # Obtener los datos enviados desde el frontend
         data = request.get_json()
+        
+        # Validar que se reciban datos
+        if not data:
+            return jsonify({"success": False, "error": "No se enviaron datos."}), 400
+
         acciones = data.get("actions", [])
-        user_ids = data.get("user_ids", [])
+        usernames = data.get("usernames", [])
 
+        # Validar que existan "actions" y "usernames"
         if not acciones:
-            return jsonify({"success": False, "error": "No se seleccionaron acciones."}), 400
+            return jsonify({"success": False, "error": "Faltan acciones (actions)."}), 400
+        if not usernames:
+            return jsonify({"success": False, "error": "Faltan nombres de usuario (usernames)."}), 400
 
-        if not user_ids:
-            return jsonify({"success": False, "error": "No se enviaron IDs de usuarios."}), 400
-
-        errores = []
-        for user_id in user_ids:
+        # Procesar acciones y usuarios (como antes)
+        resultados = {"exitosos": [], "fallidos": []}
+        for username in usernames:
             for accion in acciones:
                 try:
-                    if accion == "follow":
-                        seguir_usuario(user_id)
-                    elif accion == "like":
-                        dar_me_gusta_a_publicaciones(user_id)
+                    if accion == "dm":
+                        enviar_dm(username=username)
                     elif accion == "comment":
-                        comentario = generar_mensaje_ia("", "")  # Personalizar si es necesario
-                        comentar_publicacion(user_id, comentario)
-                    elif accion == "dm":
-                        mensaje = generar_mensaje_ia("", "")  # Personalizar si es necesario
-                        enviar_dm(user_id, mensaje)
-                    elif accion == "view_story":
-                        ver_historias(user_id)
+                        comentar_publicacion(username=username)
+                    else:
+                        resultados["fallidos"].append({
+                            "username": username,
+                            "accion": accion,
+                            "error": "Acción no implementada."
+                        })
+                    resultados["exitosos"].append({"username": username, "accion": accion})
                 except Exception as e:
-                    errores.append({"id": user_id, "action": accion, "error": str(e)})
+                    resultados["fallidos"].append({"username": username, "accion": accion, "error": str(e)})
 
-        if errores:
-            return jsonify({"success": False, "error": "Algunas acciones fallaron.", "details": errores}), 207
-
-        return jsonify({"success": True})
+        return jsonify({"success": True, "resultados": resultados}), 200
     except Exception as e:
-        print(f"[ERROR] {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route('/cargar_mas_usuarios', methods=['POST'])
-def cargar_mas_usuarios():
-    competencia = request.form.get('competencia')
-    if not competencia:
-        return jsonify({"success": False, "error": "No se proporcionó una cuenta de competencia."})
 
-    try:
-        usuarios = obtener_seguidores_de_competencia(competencia, cantidad=10)
-        return jsonify({"success": True, "users": usuarios})
-    except Exception as e:
-        print(f"❌ Error al cargar más usuarios: {e}")
-        return jsonify({"success": False, "error": str(e)})
 
 @app.route('/metrics', methods=['GET'])
 def get_metrics():
@@ -548,6 +547,34 @@ def get_metrics():
     except Exception as e:
         print(f"❌ Error al generar métricas: {e}")
         return jsonify({"error": "No se pudieron obtener las métricas."}), 500
+    
+@app.route("/chatgpt", methods=["POST"])
+def chatgpt():
+    datos = request.json
+    mensaje_usuario = datos.get("mensaje", "")
+    rol = datos.get("rol", "amigable")  # Valor por defecto
+    nombre = datos.get("nombre")  # Obtener el nombre si está disponible
+    username = datos.get("username")  # Obtener el username si está disponible
+
+    if not mensaje_usuario:
+        return jsonify({"respuesta": "No se recibió ningún mensaje."}), 400
+
+    try:
+        # Construir saludo personalizado
+        saludo = nombre if nombre else detectar_genero(username)
+
+        # Generar mensaje con el rol proporcionado
+        respuesta = generar_mensaje_ia(
+            username=saludo,  # Usar el nombre o "amigo/amiga"
+            bio=None,
+            intereses=None,
+            ultima_publicacion=mensaje_usuario,
+            rol=rol
+        )
+        return jsonify({"respuesta": respuesta})
+    except Exception as e:
+        return jsonify({"respuesta": f"Error al procesar el mensaje: {e}"}), 500
+
 
 if __name__ == "__main__":
     print("Iniciando la aplicación Flask...")

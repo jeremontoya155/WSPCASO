@@ -1,64 +1,96 @@
 import openai
-from openai import AuthenticationError, RateLimitError, APIConnectionError
-
-import random
 from config import OPENAI_API_KEY
 from genderize import Genderize
 from instagrapi import Client
+import os
+from openai import OpenAI
+
 # Configurar la clave de API de OpenAI
-openai.api_key = OPENAI_API_KEY
+
 cl = Client()
 # Mensajes predefinidos en caso de error o como alternativa
+client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY")  # Se recomienda configurar tu API Key en .env
+)
 
-def generar_mensaje_ia(username, bio=None, intereses=None, ultima_publicacion=None):
+def construir_prompt(username, bio=None, intereses=None, ultima_publicacion=None, rol="friendly", nombre=None):
     """
-    Genera un mensaje personalizado utilizando la API de OpenAI.
+    Construye un prompt dinámico en inglés para generar un mensaje personalizado.
+    """
+    contextos = {
+        "friendly": "Be casual, warm, and engaging. Use emojis where appropriate to make the message feel lighthearted.",
+        "technical": "Provide technical insights or advice, keeping the tone professional yet concise.",
+        "motivational": "Create short, inspiring, and supportive messages to uplift the user.",
+        "expert": "Respond like an expert, providing actionable and precise advice based on the context."
+    }
+    contexto = contextos.get(rol, "Be casual and concise.")
+
+    # Usar el nombre si está disponible; de lo contrario, usar "friend"
+    saludo = nombre if nombre else "friend"
+
+    # Personalizar el prompt con detalles del usuario
+    return f"""
+    {contexto}
+    User: {saludo}.
+    Bio: {bio or 'Not available'}.
+    Interests: {intereses or 'Not specified'}.
+    Latest post: {ultima_publicacion or 'Not specified'}.
+    Your task is to generate a specific and engaging response considering the user's bio and interests.
+    """
+
+
+def generar_mensaje_ia(username, bio=None, intereses=None, ultima_publicacion=None, rol="friendly", prompt=None, nombre=None):
+    """
+    Generates a concise and personalized message using OpenAI.
     """
     try:
-        # Construir el prompt
-        prompt = f"Genera un mensaje amigable para el usuario @{username}. Biografía: {bio or 'No disponible'}. Intereses: {intereses or 'No especificados'}. Última publicación: {ultima_publicacion or 'No especificada'}."
+        # Determinar saludo dinámico
+        saludo = nombre if nombre else "friend"
 
-        # Solicitar a OpenAI
-        response = openai.ChatCompletion.create(
+        # Si hay un prompt personalizado, úsalo directamente
+        if prompt:
+            contenido = prompt
+        else:
+            # Construir el prompt estándar
+            contenido = construir_prompt(username, bio, intereses, ultima_publicacion, rol, saludo)
+        
+        # Llamada al modelo OpenAI
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": "You are an assistant generating specific, personalized, and friendly responses."},
+                {"role": "user", "content": contenido}
+            ],
             temperature=0.7,
-            max_tokens=100
+            max_tokens=80
         )
-        mensaje = response["choices"][0]["message"]["content"].strip()
-        print(f"Mensaje generado por OpenAI: {mensaje}")
+
+        # Obtener y devolver la respuesta generada
+        mensaje = response.choices[0].message.content.strip()
+
+        # Enriquecer el mensaje con más personalización
+        if bio:
+            mensaje += f" By the way, I noticed your bio mentions: {bio}."
+        if intereses:
+            mensaje += f" It's great that you're interested in {intereses}!"
+        if ultima_publicacion:
+            mensaje += f" I also saw your last post: '{ultima_publicacion}'."
+
         return mensaje
-
     except Exception as e:
-        print(f"❌ Error al generar mensaje con OpenAI: {e}")
-        return "Error al generar el mensaje con OpenAI."
+        print(f"❌ Error generating message with OpenAI: {e}")
+        return "There was an error generating the message."
 
 
 
-def enviar_mensaje_personalizado(user_id, username, bio=None, intereses=None, ultima_publicacion=None):
+def detectar_genero(nombre):
     """
-    Envía un mensaje personalizado a un usuario de Instagram.
-
-    Args:
-        user_id (str): ID del usuario en Instagram.
-        username (str): Nombre de usuario del usuario.
-        bio (str, opcional): Biografía del usuario.
-        intereses (list, opcional): Lista de intereses del usuario.
-        ultima_publicacion (str, opcional): Descripción de la última publicación del usuario.
-
-    Returns:
-        bool: True si el mensaje fue enviado con éxito, False en caso de error.
+    Detecta el género del usuario basado en su nombre.
     """
-    print(f"Iniciando el envío de mensaje a @{username}...")
+    if any(nombre.lower().endswith(sufijo) for sufijo in ["a", "ella", "ana", "maría", "isa"]):  # Ejemplos
+        return "femenino"
+    return "masculino"
 
-    # Generar mensaje personalizado
-    mensaje = generar_mensaje_ia(username, bio=bio, intereses=intereses, ultima_publicacion=ultima_publicacion)
 
-    # Intentar enviar el mensaje
-    try:
-        cl.direct_send(mensaje, [user_id])
-        print(f"✅ Mensaje enviado exitosamente a @{username}: {mensaje}")
-        return True
-    except Exception as e:
-        print(f"❌ Error al enviar mensaje a @{username}: {e}")
-        return False
+
+
