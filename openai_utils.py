@@ -41,20 +41,20 @@ def construir_prompt(username, bio=None, intereses=None, ultima_publicacion=None
 
 def generar_mensaje_ia(username, bio=None, intereses=None, ultima_publicacion=None, rol="friendly", prompt=None, nombre=None):
     """
-    Generates a concise and personalized message using OpenAI.
+    Genera un mensaje personalizado utilizando OpenAI, priorizando el nombre de la cuenta si está disponible.
     """
     try:
-        # Determinar saludo dinámico
-        saludo = nombre if nombre else "friend"
+        # Usar username como prioridad, luego nombre, y finalmente "friend"
+        saludo = username if username else (nombre if nombre else "friend")
 
         # Si hay un prompt personalizado, úsalo directamente
         if prompt:
             contenido = prompt
         else:
             # Construir el prompt estándar
-            contenido = construir_prompt(username, bio, intereses, ultima_publicacion, rol, saludo)
+            contenido = construir_prompt(username=saludo, bio=bio, intereses=intereses, ultima_publicacion=ultima_publicacion, rol=rol)
         
-        # Llamada al modelo OpenAI
+        # Llamada a la API de OpenAI
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -62,13 +62,13 @@ def generar_mensaje_ia(username, bio=None, intereses=None, ultima_publicacion=No
                 {"role": "user", "content": contenido}
             ],
             temperature=0.7,
-            max_tokens=80
+            max_tokens=50
         )
 
         # Obtener y devolver la respuesta generada
         mensaje = response.choices[0].message.content.strip()
 
-        # Enriquecer el mensaje con más personalización
+        # Enriquecer el mensaje con datos adicionales
         if bio:
             mensaje += f" By the way, I noticed your bio mentions: {bio}."
         if intereses:

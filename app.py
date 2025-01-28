@@ -1,10 +1,11 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session, Response
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, Response, has_request_context
 from flask_login import LoginManager, UserMixin, current_user, login_required, login_user
 from config import UPLOAD_FOLDER, LOG_FOLDER
 from database.models import collection_users, collection_acciones
 from instagrapi import Client
-from instagram.follow import obtener_seguidores_de_competencia, seguir_usuario, dar_me_gusta_a_publicaciones, comentar_publicacion, enviar_dm, ver_historias, generar_mensaje_combinado
-from instagram.session import autenticar_con_2fa
+from instagram.follow import ejecutar_acciones_para_usuario, procesar_respuesta, usuarios_procesados, procesar_seguidores_por_lotes
+from instagram.session import autenticar_con_2fa, reautenticar_sesion
+from instagram.config_bot import  PAUSA_ENTRE_USUARIOS, acciones_aleatorias, cargar_usuarios_privados, guardar_usuarios_privados, guardar_usuarios_procesados
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import random
@@ -13,9 +14,8 @@ from instagrapi.exceptions import LoginRequired, TwoFactorRequired
 import time
 from functools import wraps
 from openai_utils import generar_mensaje_ia, detectar_genero
-
-
-
+from instagram.filters import filtrar_usuarios
+from datetime import datetime, timedelta
 
 # Configurar la aplicación Flask
 app = Flask(__name__)
@@ -252,190 +252,305 @@ def iniciar_bot():
     except Exception as e:
         print(f"[DEBUG] Error al procesar la autenticación: {e}")
         return jsonify({"error": str(e)}), 500
-
-
-
+    
 @app.route('/procesar_usuarios', methods=['POST'])
 def procesar_usuarios():
     try:
-        print("[DEBUG] Procesando usuarios con retraso...")
+        from datetime import datetime, timedelta
+        import random
+        import time
+
+        print("[DEBUG] Iniciando el procesamiento de usuarios con un límite de tiempo...")
+
+        # Cargar usuarios de la sesión
         usuarios = session.get('usuarios_seguidores', [])
+        print(f"[DEBUG] Usuarios en la sesión antes del procesamiento: {len(usuarios)}")
+
         if not usuarios:
             return jsonify({"success": False, "error": "No hay usuarios para procesar."})
-        
-        # Aquí se puede agregar lógica si es necesaria para procesar los usuarios manualmente
-        return jsonify({"success": True, "message": "Usuarios procesados con retraso."})
-    except Exception as e:
-        print(f"[DEBUG] Error al procesar usuarios: {e}")
-        return jsonify({"success": False, "error": str(e)})
 
+        # Configuración para el tiempo límite
+        duracion_horas = 6  # Tiempo total de procesamiento
+        tiempo_limite = datetime.now() + timedelta(hours=duracion_horas)
+
+        usuarios_procesados = []
+        usuarios_fallidos = []  # Lista para registrar usuarios que fallaron
+
+        while datetime.now() < tiempo_limite:
+            if not usuarios:
+                print("[DEBUG] No quedan usuarios por procesar.")
+                break
+
+            # Procesar usuarios uno por uno
+            usuario = usuarios.pop(0)
+
+            try:
+                user_id = usuario.get("id", None)
+                username = usuario.get("username", f"Usuario_{user_id if user_id else 'desconocido'}")
+                print(f"🔍 [DEBUG] Procesando usuario: {username}")
+
+                # Validar si el usuario tiene un ID válido
+                if not user_id:
+                    print(f"⚠️ Usuario sin ID detectado: {username}. Saltando...")
+                    continue
+
+                # Asignar acciones aleatorias al usuario
+                usuario["acciones"] = acciones_aleatorias()
+                print(f"✅ Acciones asignadas al usuario {username}: {usuario['acciones']}")
+
+                # Ejecutar las acciones para el usuario
+                ejecutar_acciones_para_usuario(usuario)
+                usuarios_procesados.append(usuario)
+
+                # Actualizar la sesión con los usuarios restantes
+                session['usuarios_seguidores'] = usuarios
+                session.modified = True  # Asegurar que los cambios en la sesión se guarden
+
+                # Pausa entre usuarios
+                pausa_usuario = random.uniform(600, 900)  # 10-15 minutos
+                print(f"⏳ Pausando {pausa_usuario / 60:.2f} minutos antes del próximo usuario...")
+                time.sleep(pausa_usuario)
+
+            except Exception as e:
+                print(f"❌ [DEBUG] Error al procesar usuario {username}: {e}")
+                usuarios_fallidos.append({"id": user_id, "username": username, "error": str(e)})
+                continue  # Continuar con el siguiente usuario en caso de error
+
+            # Verificar tiempo restante
+            tiempo_restante = (tiempo_limite - datetime.now()).total_seconds()
+            print(f"[DEBUG] Tiempo restante para procesar: {tiempo_restante / 3600:.2f} horas.")
+            if tiempo_restante <= 0:
+                print("[DEBUG] Tiempo límite alcanzado. Finalizando procesamiento.")
+                break
+
+        # Guardar usuarios procesados en el archivo
+        guardar_usuarios_procesados()
+        print("[DEBUG] Proceso finalizado. Usuarios procesados guardados.")
+
+        # Log de usuarios fallidos (opcional)
+        if usuarios_fallidos:
+            print(f"⚠️ Usuarios fallidos: {len(usuarios_fallidos)}")
+            with open("usuarios_fallidos.log", "a") as log_file:
+                for usuario in usuarios_fallidos:
+                    log_file.write(f"{datetime.now()} | {usuario}\n")
+
+        return jsonify({
+            "success": True,
+            "processed_users": [u['username'] for u in usuarios_procesados],
+            "failed_users": len(usuarios_fallidos),
+            "remaining_users": len(usuarios),
+            "message": f"Se procesaron {len(usuarios_procesados)} usuarios. {len(usuarios_fallidos)} fallaron. {len(usuarios)} restantes."
+        })
+
+    except Exception as e:
+        print(f"❌ [DEBUG] Error durante el procesamiento: {e}")
+        return jsonify({"success": False, "error": str(e)})
 
 @app.route('/acciones', methods=['GET', 'POST'])
 def acciones():
     print("[DEBUG] Iniciando la función /acciones")
 
+    # Verificar si el usuario está autenticado al inicio
     if 'user' not in session:
         print("[DEBUG] Usuario no autenticado. Redirigiendo a /login")
         return redirect('/login')
 
     if request.method == 'POST':
         try:
-            # Obtener los usuarios de competencia desde el formulario
+            from datetime import datetime, timedelta
+            import random
+            import time
+
+            # Obtener usuarios de competencia y configuración inicial
             competencias = request.form.get('competencia', '')
             print(f"[DEBUG] Competencias recibidas en el formulario: {competencias}")
 
-            # Procesar las competencias como lista
             competencias = [c.strip() for c in competencias.split(',') if c.strip()]
             if not competencias:
                 print("[DEBUG] No se proporcionaron competencias válidas.")
                 return jsonify({"success": False, "error": "Debes proporcionar al menos un usuario de competencia."}), 400
 
-            # Obtener seguidores de cada cuenta de competencia
-            usuarios_seguidores = []
-            for competencia in competencias:
-                print(f"[DEBUG] Procesando la competencia: {competencia}")
-                try:
-                    seguidores_ids = obtener_seguidores_de_competencia(competencia, cantidad=10)
-                    print(f"[DEBUG] IDs de seguidores obtenidos para {competencia}: {seguidores_ids}")
-                    
-                    for seguidor_id in seguidores_ids:
+            duracion_horas = 6  # Tiempo máximo de ejecución
+            tiempo_limite = datetime.now() + timedelta(hours=duracion_horas)
+            usuarios_procesados = set()
+
+            # Generar respuesta progresiva
+            def generar_respuesta():
+                usuarios_seguidores = []
+                for competencia in competencias:
+                    print(f"[DEBUG] Procesando la competencia: {competencia}")
+
+                    # Usar la versión mejorada de procesar_seguidores_por_lotes
+                    seguidores = procesar_seguidores_por_lotes(competencia, cantidad_por_lote=120)
+
+                    if not seguidores:
+                        print(f"[DEBUG] No se encontraron seguidores para {competencia}.")
+                        continue
+
+                    for seguidor_id, _ in seguidores.items():
+                        if datetime.now() >= tiempo_limite:
+                            print("⏰ Tiempo límite alcanzado. Deteniendo procesamiento.")
+                            break
+
+                        if seguidor_id in usuarios_procesados:
+                            print(f"⚠️ Usuario ya procesado detectado: {seguidor_id}. Saltando...")
+                            continue
+
                         try:
+                            # Obtener información detallada del usuario
                             info = obtener_informacion_usuario(seguidor_id)
-                            usuarios_seguidores.append({
-                                "username": info.get("username", "Usuario desconocido"),
-                                "biography": info.get("biography", "Sin biografía"),
+                            usuario = {
+                                "id": seguidor_id,
+                                "username": info.get("username", f"Usuario_{seguidor_id}"),
+                                "biography": info.get("biography", "No disponible"),
                                 "follower_count": info.get("follower_count", 0),
                                 "media_count": info.get("media_count", 0),
-                            })
+                                "is_private": info.get("is_private", False)
+                            }
+
+                            # Filtrar cuentas privadas o incompletas
+                            if usuario["is_private"]:
+                                print(f"⚠️ Usuario privado detectado: {usuario['username']}. Saltando...")
+                                continue
+
+                            # Asignar acciones aleatorias
+                            usuario["acciones"] = acciones_aleatorias()
+                            print(f"✅ Acciones asignadas a {usuario['username']}: {usuario['acciones']}")
+
+                            # Ejecutar acciones para el usuario
+                            ejecutar_acciones_para_usuario(usuario)
+                            usuarios_seguidores.append(usuario)
+                            usuarios_procesados.add(seguidor_id)
+
+                            # Enviar datos parciales al cliente
+                            yield f"✅ Procesado usuario: {usuario['username']} con acciones: {usuario['acciones']}<br>"
+
+                            # Pausa entre usuarios
+                            pausa_usuario = random.uniform(600, 900)  # 10-15 minutos
+                            print(f"⏳ Pausando {pausa_usuario / 60:.2f} minutos antes del próximo usuario...")
+                            time.sleep(pausa_usuario)
+
                         except Exception as e:
-                            print(f"[DEBUG] Error al obtener información del seguidor {seguidor_id}: {e}")
-                except Exception as e:
-                    print(f"[DEBUG] Error al obtener seguidores de la competencia {competencia}: {e}")
+                            print(f"❌ Error al procesar usuario {seguidor_id}: {e}")
+                            yield f"❌ Error al procesar usuario: {seguidor_id}<br>"
 
-            if not usuarios_seguidores:
-                print("[DEBUG] No se encontraron seguidores para las cuentas especificadas.")
-                return jsonify({"success": False, "error": "No se encontraron seguidores para las cuentas especificadas."}), 404
+                print("[DEBUG] Procesamiento completo.")
+                yield "✅ Procesamiento completado.<br>"
 
-            # Guardar usuarios en la sesión para usarlos en la plantilla
-            session['usuarios_seguidores'] = usuarios_seguidores
-
-            return jsonify({"success": True, "users": usuarios_seguidores})
+            return Response(generar_respuesta(), content_type='text/html')
 
         except Exception as e:
             print(f"[DEBUG] Error en el procesamiento de /acciones: {e}")
             return jsonify({"success": False, "error": str(e)}), 500
 
-    # Si la solicitud es GET, renderizar la página con los usuarios guardados
+    # Renderizar la página si es una solicitud GET
     usuarios_seguidores = session.get('usuarios_seguidores', [])
     print(f"[DEBUG] Usuarios seguidores en sesión: {len(usuarios_seguidores)}")
     return render_template('Acciones.html', users=usuarios_seguidores)
 
-@app.route('/procesar_accion', methods=['POST'])
-def procesar_accion():
+@app.route('/aplicar_filtros', methods=['POST'])
+def aplicar_filtros():
+    """
+    Procesa usuarios según los filtros enviados desde el frontend y ajusta el tiempo de trabajo del bot.
+    """
     try:
-        data = request.get_json()
-        user = data.get("user")  # Ahora recibimos los datos completos del usuario
-        action = data.get("action")
+        from datetime import datetime, timedelta
+        import random
+        import time
 
-        if not user or not action:
-            return jsonify({"success": False, "error": "Faltan datos para procesar la acción."}), 400
+        print("[DEBUG] Procesando filtros enviados desde el frontend")
 
-        if action == "comment":
-            comentario = generar_mensaje_combinado(user["username"], user.get("biography"))
-            comentar_publicacion(user["id"], comentario)
-        elif action == "dm":
-            mensaje = generar_mensaje_combinado(user["username"], user.get("biography"))
-            enviar_dm(user["id"], mensaje)
-        elif action == "follow":
-            seguir_usuario(user["id"])
-        elif action == "like":
-            dar_me_gusta_a_publicaciones(user["id"])
-        elif action == "view_story":
-            ver_historias(user["id"])
+        # Obtener los datos del formulario
+        competencias_raw = request.form.get('competidores', '')
+        duracion_horas = int(request.form.get('duracion', 6))  # Duración por defecto: 6 horas
+        min_publicaciones = int(request.form.get('min_publicaciones', 1))
+        min_seguidores = int(request.form.get('min_seguidores', 0))  # Ahora opcional
 
-        return jsonify({"success": True, "message": f"Acción '{action}' realizada con éxito."})
+        competencias = [c.strip() for c in competencias_raw.split(',') if c.strip()]
+
+        if not competencias:
+            return jsonify({"success": False, "error": "Debes proporcionar al menos una competencia válida."}), 400
+
+        # Configuración del tiempo límite
+        tiempo_limite = datetime.now() + timedelta(hours=duracion_horas)
+        print(f"[DEBUG] Tiempo límite configurado: {tiempo_limite}")
+
+        usuarios_procesados = set()  # Almacenar IDs de usuarios procesados
+
+        # Procesamiento de usuarios
+        while datetime.now() < tiempo_limite:
+            print("[DEBUG] Iniciando procesamiento de usuarios...")
+
+            for competencia in competencias:
+                print(f"[DEBUG] Procesando competencia: {competencia}")
+
+                # Usar la versión mejorada de procesar_seguidores_por_lotes
+                seguidores = procesar_seguidores_por_lotes(competencia, cantidad_por_lote=120)
+
+                if not seguidores:
+                    print(f"[DEBUG] No se encontraron seguidores para {competencia}.")
+                    continue
+
+                # Usar la función filtrar_usuarios optimizada
+                usuarios_filtrados = filtrar_usuarios(seguidores, min_publicaciones=min_publicaciones)
+                print(f"[DEBUG] Usuarios filtrados: {len(usuarios_filtrados)}")
+
+                for usuario in usuarios_filtrados:
+                    user_id = usuario.get("id")
+                    username = usuario.get("username", f"Usuario_{user_id if user_id else 'desconocido'}")
+
+                    if user_id in usuarios_procesados:
+                        print(f"⚠️ Usuario ya procesado: {username}. Saltando...")
+                        continue
+
+                    try:
+                        # Asignar acciones aleatorias al usuario
+                        usuario["acciones"] = acciones_aleatorias()
+                        print(f"✅ Acciones asignadas a {username}: {usuario['acciones']}")
+
+                        # Ejecutar acciones para el usuario
+                        ejecutar_acciones_para_usuario(usuario)
+                        usuarios_procesados.add(user_id)
+                        print(f"✅ Usuario procesado: {username}")
+
+                        # Pausa entre usuarios
+                        pausa_usuario = random.uniform(10 * 60, 15 * 60)  # 10-15 minutos
+                        print(f"⏳ Pausando {pausa_usuario / 60:.2f} minutos antes del próximo usuario...")
+                        time.sleep(pausa_usuario)
+
+                    except Exception as e:
+                        print(f"❌ Error al procesar usuario {username}: {e}")
+
+            # Verificar tiempo restante en cada iteración
+            if datetime.now() >= tiempo_limite:
+                print("[DEBUG] Tiempo límite alcanzado. Finalizando procesamiento.")
+                break
+
+        print("[DEBUG] Procesamiento completo.")
+        return jsonify({"success": True, "message": "Procesamiento completo."})
+
     except Exception as e:
+        print(f"❌ Error inesperado: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@app.route('/aplicar_filtros', methods=['POST'])
-def aplicar_filtros():
+@app.route('/responder', methods=['POST'])
+def responder():
     try:
-        print("[DEBUG] Procesando filtros enviados desde el frontend")
+        datos = request.json
+        user_id = datos.get("user_id")
+        mensaje_usuario = datos.get("mensaje_usuario")
+        tipo = datos.get("tipo", "dm")
+        rol = datos.get("rol", "amigable")
 
-        # Obtener y procesar los datos enviados desde el formulario
-        competencias = request.form.get('competidores', '').split(',')
-        competencias = [c.strip() for c in competencias if c.strip()]
-        
-        usuarios_filtrados = []
-        usuarios_con_errores = []
+        if not user_id or not mensaje_usuario:
+            return jsonify({"success": False, "error": "Datos incompletos para procesar la respuesta."}), 400
 
-        # Validación de competencias
-        if not competencias:
-            print("[DEBUG] No se proporcionaron competencias válidas.")
-            return jsonify({"success": False, "error": "Debes proporcionar al menos una competencia válida."}), 400
-
-        print(f"[DEBUG] Competencias recibidas: {competencias}")
-
-        # Obtener el rol de ChatGPT desde el formulario
-        rol = request.form.get('rol', 'amigable')  # Rol por defecto
-
-        # Procesar cada competencia
-        for competencia in competencias:
-            print(f"[DEBUG] Procesando la competencia: {competencia}")
-            try:
-                # Obtener seguidores con información completa
-                seguidores_info = obtener_seguidores_de_competencia(competencia, cantidad=3)
-                print(f"[DEBUG] Información de seguidores obtenida para {competencia}: {seguidores_info}")
-
-                # Agregar usuarios obtenidos (sin filtrar, como solicitas)
-                usuarios_filtrados.extend(seguidores_info)
-
-            except Exception as e:
-                print(f"[DEBUG] Error al obtener seguidores de la competencia {competencia}: {e}")
-                usuarios_con_errores.append({"competencia": competencia, "error": str(e)})
-
-        # Si no hay usuarios filtrados, devolver un mensaje pero continuar
-        if not usuarios_filtrados:
-            print("[DEBUG] No se encontraron usuarios, pero se generará el flujo con usuarios vacíos.")
-            return jsonify({"success": True, "users": [], "errors": usuarios_con_errores})
-
-        # Generar mensajes con ChatGPT según el rol
-        usuarios_con_mensajes = []
-        for usuario in usuarios_filtrados:
-            try:
-                # Generar comentario personalizado con ChatGPT
-                comentario = generar_mensaje_ia(
-                    username=usuario["username"],
-                    bio=usuario.get("biography", "Sin biografía"),
-                    intereses=None,
-                    ultima_publicacion=None,
-                    rol=rol  # Aplicar el rol seleccionado
-                )
-                print(f"✅ Comentario generado para @{usuario['username']}: {comentario}")
-                
-                # Agregar usuario y comentario a la lista final
-                usuarios_con_mensajes.append({
-                    "username": usuario["username"],
-                    "biography": usuario.get("biography", "Sin biografía"),
-                    "follower_count": usuario.get("follower_count", 0),
-                    "comentario": comentario
-                })
-            except Exception as e:
-                print(f"❌ Error al generar comentario para @{usuario['username']}: {e}")
-                usuarios_con_errores.append({"username": usuario["username"], "error": str(e)})
-
-        # Construir la respuesta final
-        return jsonify({
-            "success": True,
-            "users": usuarios_con_mensajes,
-            "errors": usuarios_con_errores,
-        })
-
+        procesar_respuesta(user_id, mensaje_usuario, tipo, rol)
+        return jsonify({"success": True, "message": "Respuesta procesada correctamente."})
     except Exception as e:
-        print(f"[DEBUG] Error inesperado en aplicar_filtros: {e}")
-        return jsonify({"success": False, "error": f"Error inesperado: {str(e)}"}), 500
-
+        print(f"❌ Error en el endpoint /responder: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 def obtener_informacion_usuario(user_id):
@@ -445,16 +560,22 @@ def obtener_informacion_usuario(user_id):
     try:
         print(f"🔍 Obteniendo información del usuario {user_id}")
         user_info = cl.user_info(user_id)
-
-        # Retorna la información si la solicitud es exitosa
         return {
             "id": user_id,
-            "username": user_info.get("username", "No disponible"),
+            "username": user_info.get("username", f"Usuario_{user_id}"),
             "biography": user_info.get("biography", "No disponible"),
             "follower_count": user_info.get("follower_count", 0),
             "media_count": user_info.get("media_count", 0),
             "is_private": user_info.get("is_private", False),
         }
+    except Exception as e:
+        print(f"❌ Error al obtener información del usuario {user_id}: {e}")
+        # Intentar reautenticar si es un problema de sesión
+        if "LoginRequired" in str(e):
+            print("⚠️ La sesión no es válida. Intentando reautenticación...")
+            if reautenticar_sesion():
+                return obtener_informacion_usuario(user_id)
+        return {"id": user_id, "username": f"Usuario_{user_id}", "error": str(e)}
 
     except KeyError as ke:
         # Si falta información clave, devolver solo el ID y un mensaje de error
@@ -473,47 +594,6 @@ def obtener_informacion_usuario(user_id):
             "username": "No disponible",
             "error": "Error desconocido al procesar el usuario"
         }
-@app.route('/procesar_acciones_lote', methods=['POST'])
-def procesar_acciones_lote():
-    try:
-        # Obtener los datos enviados desde el frontend
-        data = request.get_json()
-        
-        # Validar que se reciban datos
-        if not data:
-            return jsonify({"success": False, "error": "No se enviaron datos."}), 400
-
-        acciones = data.get("actions", [])
-        usernames = data.get("usernames", [])
-
-        # Validar que existan "actions" y "usernames"
-        if not acciones:
-            return jsonify({"success": False, "error": "Faltan acciones (actions)."}), 400
-        if not usernames:
-            return jsonify({"success": False, "error": "Faltan nombres de usuario (usernames)."}), 400
-
-        # Procesar acciones y usuarios (como antes)
-        resultados = {"exitosos": [], "fallidos": []}
-        for username in usernames:
-            for accion in acciones:
-                try:
-                    if accion == "dm":
-                        enviar_dm(username=username)
-                    elif accion == "comment":
-                        comentar_publicacion(username=username)
-                    else:
-                        resultados["fallidos"].append({
-                            "username": username,
-                            "accion": accion,
-                            "error": "Acción no implementada."
-                        })
-                    resultados["exitosos"].append({"username": username, "accion": accion})
-                except Exception as e:
-                    resultados["fallidos"].append({"username": username, "accion": accion, "error": str(e)})
-
-        return jsonify({"success": True, "resultados": resultados}), 200
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
 
 
 
@@ -522,6 +602,11 @@ def get_metrics():
     """
     Devuelve métricas desglosadas por tipo de acción realizada.
     """
+    import logging
+
+    # Deshabilitar logs temporalmente
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
+
     try:
         # Recuperar los conteos de cada acción desde la base de datos
         acciones = {
@@ -532,7 +617,7 @@ def get_metrics():
             "ver_historias": collection_acciones.count_documents({"accion": "view_story"})
         }
 
-        # Estado del bot (puedes ajustarlo dinámicamente si es necesario)
+        # Estado del bot
         estado_bot = "activo"
 
         # Métricas finales
@@ -547,6 +632,11 @@ def get_metrics():
     except Exception as e:
         print(f"❌ Error al generar métricas: {e}")
         return jsonify({"error": "No se pudieron obtener las métricas."}), 500
+
+    finally:
+        # Volver a habilitar logs
+        logging.getLogger('werkzeug').setLevel(logging.INFO)
+
     
 @app.route("/chatgpt", methods=["POST"])
 def chatgpt():
@@ -577,6 +667,9 @@ def chatgpt():
 
 
 if __name__ == "__main__":
-    print("Iniciando la aplicación Flask...")
-    app.run(debug=True)
-
+    cargar_usuarios_privados()
+    try:
+        # Código principal
+        app.run(debug=True)
+    finally:
+        guardar_usuarios_privados()
