@@ -1,3 +1,7 @@
+import os
+from dotenv import load_dotenv
+from celery import Celery
+import requests
 
 # Cargar las variables de entorno desde .env
 load_dotenv()
