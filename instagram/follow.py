@@ -23,7 +23,7 @@ def obtener_seguidores(username, cantidad=120):
         print(f"❌ Error al obtener seguidores de @{username}: {e}")
         return []
 
-def procesar_usuarios(username, duracion_horas=6, cantidad=120, pausa_entre_usuarios=(100, 450)):
+def procesar_usuarios(username, duracion_horas=6, cantidad=120, pausa_entre_usuarios=(100, 350)):
     """
     Obtiene seguidores y ejecuta acciones con pausas.
     """
@@ -52,7 +52,7 @@ def procesar_usuarios(username, duracion_horas=6, cantidad=120, pausa_entre_usua
         print(f"✅ [DEBUG] Procesando seguidor {idx + 1}/{len(seguidores)}: {usuario.username}")
 
         try:
-            acciones, _ = acciones_aleatorias(cantidad=1)
+            acciones, _ = acciones_aleatorias(cantidad=2)
         except ValueError as e:
             print(f"❌ [ERROR] Formato inesperado en acciones_aleatorias: {e}")
             continue  
@@ -112,66 +112,47 @@ def ejecutar_accion(usuario, accion):
 
 
 
-def generar_mensaje_combinado(tipo, username, nombre=None, bio=None, intereses=None, ultima_publicacion=None, rol="friendly", mensajes_usuario=[], max_caracteres=60):
+def generar_mensaje_combinado(tipo, username, nombre=None, mensajes_usuario=[], max_caracteres=60, historial_mensajes=set()):
     """
-    Genera un mensaje combinando un mensaje de usuario con IA sin agregar saludos innecesarios.
+    Genera un mensaje combinando un mensaje del usuario con IA y personaliza el saludo,
+    asegurando que los mensajes no se repitan entre usuarios y sean más concisos.
     :param tipo: Tipo de mensaje (dm o comentario).
     :param username: Nombre de usuario de destino.
     :param nombre: Nombre real del usuario (si está disponible).
-    :param bio: Biografía del usuario.
-    :param intereses: Intereses del usuario.
-    :param ultima_publicacion: Última publicación del usuario.
-    :param rol: Estilo del mensaje.
     :param mensajes_usuario: Lista de mensajes proporcionados desde el frontend.
     :param max_caracteres: Límite de caracteres para el mensaje.
+    :param historial_mensajes: Conjunto de mensajes ya enviados para evitar repeticiones.
     """
     try:
-        # 🔹 Usar mensajes del usuario si están disponibles, de lo contrario generar con IA
-        if mensajes_usuario:
-            mensaje_base = random.choice(mensajes_usuario)
-        else:
-            mensaje_base = ""  # ✅ Se elimina el mensaje base innecesario
+        if not mensajes_usuario:
+            return "No hay mensajes disponibles."  # Mensaje por defecto si la lista está vacía
 
-        # 🔹 Decidir si usar nombre o username
+        # Filtrar mensajes que no hayan sido usados
+        mensajes_disponibles = [m for m in mensajes_usuario if m not in historial_mensajes]
+        
+        if not mensajes_disponibles:  # Si todos los mensajes ya fueron usados, reiniciar el historial
+            historial_mensajes.clear()
+            mensajes_disponibles = mensajes_usuario
+        
+        # Seleccionar un mensaje base aleatorio del usuario y añadirlo al historial
+        mensaje_base = random.choice(mensajes_disponibles)
+        historial_mensajes.add(mensaje_base)
+
+        # Generar complemento con IA de forma resumida
+        mensaje_ia = generar_mensaje_ia(username=username, prompt=f"Resume: {mensaje_base}")
+        
+        # Lista de saludos alternativos
+        saludos_alternativos = ["Hey", "Hello", "Hi", "Greetings", "What's up"]
+        
+        # Personalizar el mensaje con el nombre de la cuenta o un saludo aleatorio
         if nombre:
             saludo = nombre
         elif username:
             saludo = username
         else:
-            saludo = "friend"
+            saludo = random.choice(saludos_alternativos)
 
-        # 🔹 Controlar la repetición del saludo (50% de los casos sin saludo)
-        if random.random() > 0.5:
-            saludo = ""
-
-        # 🔹 Generar mensaje personalizado con IA
-        prompt = construir_prompt(
-            username=username,
-            bio=bio,
-            intereses=intereses,
-            ultima_publicacion=ultima_publicacion,
-            rol=rol,
-            nombre=saludo
-        )
-        mensaje_personalizado = generar_mensaje_ia(
-            username=username,
-            bio=bio,
-            intereses=intereses,
-            ultima_publicacion=ultima_publicacion,
-            rol=rol,
-            prompt=prompt,
-            nombre=saludo
-        )
-
-        # 🔹 Combinar mensajes sin agregar saludos innecesarios
-        if mensaje_base:
-            mensaje_completo = f"{mensaje_base} {mensaje_personalizado}".strip()
-        else:
-            mensaje_completo = mensaje_personalizado.strip()
-
-        # 🔹 Limitar la longitud del mensaje
-        if len(mensaje_completo) > max_caracteres:
-            mensaje_completo = mensaje_completo[:max_caracteres].rstrip(".")
+        mensaje_completo = f"{saludo}, {mensaje_ia}".strip()
 
         print(f"[DEBUG] Mensaje generado para @{username}: {mensaje_completo}")
         return mensaje_completo
@@ -180,6 +161,25 @@ def generar_mensaje_combinado(tipo, username, nombre=None, bio=None, intereses=N
         print(f"❌ [ERROR] en generar_mensaje_combinado: {e}")
         return "Error en la generación del mensaje."
 
+# Ejemplo de uso:
+historial = set()
+mensajes_dm = [
+    "How’s it going? 🌸",
+    "How’s everything? ✨",
+    "Nice to meet you! How’ve you been? 🌷"
+]
+
+mensajes_comentarios = [
+    "I love your content! What inspired you to start sharing?",
+    "Your posts are always so insightful. How do you come up with these ideas?",
+    "Great post! What’s your biggest takeaway from this topic?"
+]
+
+mensaje_seleccionado_dm = generar_mensaje_combinado(tipo="dm", username="JohnDoe", mensajes_usuario=mensajes_dm, historial_mensajes=historial)
+print("Mensaje DM seleccionado:", mensaje_seleccionado_dm)
+
+mensaje_seleccionado_comentario = generar_mensaje_combinado(tipo="comentario", username="JohnDoe", mensajes_usuario=mensajes_comentarios, historial_mensajes=historial)
+print("Mensaje Comentario seleccionado:", mensaje_seleccionado_comentario)
 
 def dar_me_gusta_a_publicaciones(user_id):
     if not user_id:

@@ -23,9 +23,9 @@ LIMITES_ACCIONES_POR_HORA = {
 
 
 PAUSAS_POR_ACCION = {
-    "like": (15, 50),  # Pausa entre 15 y 45 segundos para 'Me gusta'
-    "comment": (40, 90),  # Pausa entre 30 y 90 segundos para comentarios
-    "direct_message": (40, 160),  # Pausa más larga para mensajes directos
+    "like": (15, 35),  # Pausa entre 15 y 45 segundos para 'Me gusta'
+    "comment": (15, 50),  # Pausa entre 30 y 90 segundos para comentarios
+    "direct_message": (40, 85),  # Pausa más larga para mensajes directos
 }
 
 

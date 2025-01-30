@@ -405,7 +405,6 @@ def chatgpt():
 
 if __name__ == "__main__":
     try:
-        # Código principal
-        app.run(debug=True)
+        app.run(debug=False, use_reloader=False)
     except Exception as e:
         print(f"Error al iniciar la aplicación: {e}")
