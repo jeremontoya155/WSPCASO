@@ -6,6 +6,9 @@ from datetime import datetime
 from pymongo import MongoClient
 import os
 
+
+
+
 # Cargar variables de entorno
 MONGO_URI = os.getenv("MONGO_URI")  # Asegúrate de que esta variable esté configurada
 DB_NAME = os.getenv("DB_NAME")      # Asegúrate de que esta variable esté configurada
@@ -33,10 +36,7 @@ except Exception as e:
 # Colecciones de la base de datos
 try:
     collection_users = db["users"]
-    collection_seguidos = db["seguidos"]
     collection_tokens = db["tokens"]
-    collection_acciones = db["acciones_realizadas"]
-    collection_mensajes = db["mensajes_enviados"]
     print("Colecciones configuradas correctamente.")
 except Exception as e:
     print("Error al configurar las colecciones:", str(e))
@@ -69,17 +69,6 @@ def obtener_token(username):
     token_doc = collection_tokens.find_one({"username": username})
     return token_doc["settings"] if token_doc else None
 
-def guardar_usuario_seguido(username):
-    try:
-        if not collection_seguidos.find_one({"username": username}):
-            collection_seguidos.insert_one({"username": username})
-            print(f"Usuario @{username} guardado como seguido.")
-        else:
-            print(f"Usuario @{username} ya está registrado.")
-    except Exception as e:
-        print(f"Error al guardar el usuario @{username}: {e}")
-        return False
-    return True
 
 def limpiar_sesion(username):
     collection_tokens.delete_one({"username": username})
@@ -116,37 +105,3 @@ def autenticar_usuario(username, password):
         return False
     return True
 
-# database/models.py
-
-def verificar_accion(user_id, accion, detalle=None):
-    """
-    Verifica si una acción ya fue realizada para un usuario.
-    Args:
-        user_id (str): ID del usuario objetivo.
-        accion (str): Tipo de acción ('me_gusta', 'ver_historia').
-        detalle (dict): Detalles adicionales de la acción.
-    Returns:
-        bool: True si la acción ya fue registrada, False de lo contrario.
-    """
-    query = {"user_id": user_id, "accion": accion}
-    if detalle:
-        query["detalle"] = detalle
-
-    return collection_acciones.find_one(query) is not None
-
-
-def registrar_accion(user_id, accion, detalle=None):
-    """
-    Registra una acción realizada para evitar duplicados.
-    """
-    try:
-        registro = {
-            "user_id": user_id,
-            "accion": accion,
-            "fecha": datetime.now().strftime("%Y-%m-%d"),
-            "detalle": detalle or {}
-        }
-        collection_acciones.insert_one(registro)
-        print(f"✅ Acción '{accion}' registrada para el usuario {user_id}.")
-    except Exception as e:
-        print(f"❌ Error al registrar la acción: {e}")

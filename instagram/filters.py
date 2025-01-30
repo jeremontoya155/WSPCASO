@@ -1,6 +1,4 @@
-# filters.py (Funciones de filtrado de usuarios)
-from database.models import collection_seguidos  # Si necesitas acceder a usuarios seguidos
-from instagram.follow import dar_me_gusta_a_publicaciones
+
 
 
 def aplicar_filtros_individual(usuario, filtros):

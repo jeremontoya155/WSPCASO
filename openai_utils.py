@@ -15,13 +15,13 @@ client = OpenAI(
 
 def construir_prompt(username, bio=None, intereses=None, ultima_publicacion=None, rol="friendly", nombre=None):
     """
-    Construye un prompt dinámico en inglés para generar un mensaje personalizado.
+    Construye un prompt dinámico en inglés para generar un mensaje personalizado y breve.
     """
     contextos = {
-        "friendly": "Be casual, warm, and engaging. Use emojis where appropriate to make the message feel lighthearted.",
-        "technical": "Provide technical insights or advice, keeping the tone professional yet concise.",
+        "friendly": "Be casual, warm, and engaging. Keep the message brief and lighthearted.",
+        "technical": "Provide concise technical insights or advice in a professional tone.",
         "motivational": "Create short, inspiring, and supportive messages to uplift the user.",
-        "expert": "Respond like an expert, providing actionable and precise advice based on the context."
+        "expert": "Respond like an expert, offering precise and actionable advice briefly."
     }
     contexto = contextos.get(rol, "Be casual and concise.")
 
@@ -35,13 +35,12 @@ def construir_prompt(username, bio=None, intereses=None, ultima_publicacion=None
     Bio: {bio or 'Not available'}.
     Interests: {intereses or 'Not specified'}.
     Latest post: {ultima_publicacion or 'Not specified'}.
-    Your task is to generate a specific and engaging response considering the user's bio and interests.
+    Generate a brief, specific, and engaging response considering the user's bio and interests.
     """
-
 
 def generar_mensaje_ia(username, bio=None, intereses=None, ultima_publicacion=None, rol="friendly", prompt=None, nombre=None):
     """
-    Genera un mensaje personalizado utilizando OpenAI, priorizando el nombre de la cuenta si está disponible.
+    Genera un mensaje breve y personalizado utilizando OpenAI, priorizando el nombre de la cuenta si está disponible.
     """
     try:
         # Usar username como prioridad, luego nombre, y finalmente "friend"
@@ -54,43 +53,21 @@ def generar_mensaje_ia(username, bio=None, intereses=None, ultima_publicacion=No
             # Construir el prompt estándar
             contenido = construir_prompt(username=saludo, bio=bio, intereses=intereses, ultima_publicacion=ultima_publicacion, rol=rol)
         
-        # Llamada a la API de OpenAI
+        # Llamada a la API de OpenAI con tokens más bajos para mensajes cortos
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are an assistant generating specific, personalized, and friendly responses."},
+                {"role": "system", "content": "You are an assistant generating brief, personalized, and friendly responses."},
                 {"role": "user", "content": contenido}
             ],
             temperature=0.7,
-            max_tokens=50
+            max_tokens=30  # Reducir tokens para mensajes más cortos
         )
 
         # Obtener y devolver la respuesta generada
         mensaje = response.choices[0].message.content.strip()
 
-        # Enriquecer el mensaje con datos adicionales
-        if bio:
-            mensaje += f" By the way, I noticed your bio mentions: {bio}."
-        if intereses:
-            mensaje += f" It's great that you're interested in {intereses}!"
-        if ultima_publicacion:
-            mensaje += f" I also saw your last post: '{ultima_publicacion}'."
-
         return mensaje
     except Exception as e:
         print(f"❌ Error generating message with OpenAI: {e}")
         return "There was an error generating the message."
-
-
-
-def detectar_genero(nombre):
-    """
-    Detecta el género del usuario basado en su nombre.
-    """
-    if any(nombre.lower().endswith(sufijo) for sufijo in ["a", "ella", "ana", "maría", "isa"]):  # Ejemplos
-        return "femenino"
-    return "masculino"
-
-
-
-

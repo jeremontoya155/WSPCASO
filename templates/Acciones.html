@@ -5,26 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Seleccionar Acciones</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    
 </head>
 <body>
-
-
     <div class="container">
         <h1>Selecciona las Acciones</h1>
 
-        <div id="metrics-container">
-            <h2>Métricas del Bot</h2>
-            <p>Total de acciones realizadas: <span id="total-acciones">0</span></p>
-            <ul>
-                <li>Seguir Usuarios: <span id="seguir-usuarios">0</span></li>
-                <li>Dar Me Gusta: <span id="dar-me-gusta">0</span></li>
-                <li>Comentar: <span id="comentar-publicacion">0</span></li>
-                <li>Enviar DM: <span id="enviar-dm">0</span></li>
-                <li>Ver Historias: <span id="ver-historias">0</span></li>
-            </ul>
-        </div>
-        
         <h2>Configurar Comportamiento de la IA</h2>
         <label for="rol-ia">Selecciona el Rol de la IA:</label>
         <select id="rol-ia" name="rol">
@@ -35,7 +20,11 @@
         </select>
 
         <!-- Formulario de Competidores y Filtros -->
-        <form id="filters-form" style="margin-bottom: 20px;">
+        <form id="filters-form" enctype="multipart/form-data" style="margin-bottom: 20px;">
+            <h2>Configurar Tiempo de Ejecución</h2>
+<label for="duracion">Duración de ejecución (horas):</label>
+<input type="number" id="duracion" name="duracion" min="1" max="24" value="6">
+
             <h2>Usuarios de Competencia</h2>
             <label for="competidores">Competidores:</label>
             <textarea id="competidores" name="competidores" rows="3" placeholder="Ingresa competidores separados por comas">{{ competencia }}</textarea>
@@ -59,304 +48,60 @@
                 <option value="publica">Pública</option>
                 <option value="privada">Privada</option>
             </select>
-    
+            
+            <h2>Cargar Mensajes</h2>
+                <label for="mensajes-dm">Cargar mensajes para DM:</label>
+                <input type="file" id="mensajes-dm" name="mensajes_dm" accept=".txt" multiple>
+                <br>
+                <label for="mensajes-comentarios">Cargar mensajes para comentarios:</label>
+                <input type="file" id="mensajes-comentarios" name="mensajes_comentarios" accept=".txt" multiple>
+                <br>
+        
+            
             <button type="submit">Aplicar Filtros</button>
         </form>
-    
-    
-            <!-- Contenedor para seleccionar acciones globales -->
-            <h2>Selecciona Acciones para el Lote:</h2>
-            <div id="acciones-lote">
-                <label><input type="checkbox" name="accion" value="follow"> Seguir</label>
-                <label><input type="checkbox" name="accion" value="comment"> Comentar</label>
-                <label><input type="checkbox" name="accion" value="like"> Dar Me Gusta</label>
-                <label><input type="checkbox" name="accion" value="dm"> Enviar DM</label>
-                <label><input type="checkbox" name="accion" value="view_story"> Ver Historias</label>
-            </div>
-            <button id="realizar-acciones-lote" style="margin-top: 20px;">Realizar Acciones para el Lote</button>
-        
-            <!-- Contenedor para mostrar usuarios -->
-            <div id="users-container">
-                <p>No hay usuarios procesados todavía.</p>
-            </div>
-        </div>
-        
-        <!-- Botón para cargar más usuarios -->
-        <button id="cargar-mas-usuarios" onclick="cargarMasUsuarios()" style="margin-top: 20px;">Cargar Más Usuarios</button>
     </div>
     
     <script>
-        
-        let processedUserIds = new Set(); // Almacena los IDs procesados
-
-         let offset = 0; // Control del desplazamiento para cargar más usuarios
-        const cantidadPorCarga = 10;
-
-        function crearUserCard(user) {
-    console.log("[DEBUG] Usuario procesado:", user); // Verifica las propiedades del usuario en la consola
-
-    return `
-        <div class="user-card" data-username="${user.username || "Sin username"}" data-user-id="${user.id || "Sin ID"}">
-            <h2>Usuario: ${user.username || "Sin nombre de usuario"}</h2>
-            <p>Nombre: ${user.full_name || "Sin nombre disponible"}</p>
-            <p>Biografía: ${user.biography || "Sin biografía disponible"}</p>
-            <p>Seguidores: ${user.follower_count !== undefined ? user.follower_count : "No disponible"}</p>
-            <p>Publicaciones: ${user.media_count !== undefined ? user.media_count : "No disponible"}</p>
-        </div>
-    `;
-}
-
-
-
-async function enviarMensajeAChatGPT(mensajeUsuario, rol) {
-    try {
-        const response = await fetch("/chatgpt", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ mensaje: mensajeUsuario, rol: rol }),
-        });
-        const datos = await response.json();
-        return datos.respuesta; // Respuesta generada por ChatGPT
-    } catch (error) {
-        console.error("Error al enviar el mensaje:", error);
-        return "Hubo un problema al procesar tu solicitud.";
-    }
-}
-
-
-
-        // Función global para realizar acciones
-        async function realizarAccion(action, userId) {
-    console.log(`[DEBUG] Ejecutando acción: ${action} para el usuario: ${userId}`);
-    try {
-        const body = { action, user_id: userId };
-
-        const response = await fetch('/procesar_accion', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-            throw new Error(`Error HTTP: ${response.status}`);
-        }
-
-        const data = await response.json();
-        if (data.success) {
-            alert(`Acción '${action}' realizada con éxito para el usuario ${userId}`);
-            // Marcar la tarjeta como procesada
-            const userCard = document.querySelector(`.user-card[data-user-id="${userId}"]`);
-            if (userCard) {
-                userCard.classList.add('processed');
-            }
-            // Agregar el ID a la lista de procesados
-            processedUserIds.add(userId);
-        } else {
-            alert(`Error al realizar la acción '${action}': ${data.error}`);
-        }
-    } catch (error) {
-        console.error(`[DEBUG] Error al realizar la acción '${action}' para el usuario ${userId}:`, error);
-        alert("Hubo un problema al realizar la acción. Revisa la consola para más detalles.");
-    }
-}
-
-document.getElementById('realizar-acciones-lote').addEventListener('click', async () => {
-    // Obtener las acciones seleccionadas
-    const selectedActions = Array.from(document.querySelectorAll('#acciones-lote input[name="accion"]:checked'))
-        .map(input => input.value);
-
-    // Validar que al menos haya una acción seleccionada
-    if (selectedActions.length === 0) {
-        alert('Por favor, selecciona al menos una acción.');
-        return;
-    }
-
-    // Obtener los nombres de usuario de las tarjetas
-    const userCards = document.querySelectorAll('.user-card');
-    if (userCards.length === 0) {
-        alert('No hay usuarios disponibles para procesar.');
-        return;
-    }
-
-    // Extraer los nombres de usuario
-    const usernames = Array.from(userCards).map(card => card.dataset.username);
-
-    try {
-        // Enviar la solicitud al backend
-        const response = await fetch('/procesar_acciones_lote', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actions: selectedActions, usernames: usernames }),
-        });
-
-        // Manejar errores HTTP
-        if (!response.ok) {
-            throw new Error(`Error HTTP: ${response.status}`);
-        }
-
-        // Procesar la respuesta del backend
-        const data = await response.json();
-        if (data.success) {
-            alert('Acciones realizadas con éxito para todos los usuarios.');
-        } else {
-            const errores = data.resultados?.fallidos || [];
-            let mensajeError = 'Algunas acciones fallaron:\n';
-            errores.forEach(error => {
-                mensajeError += `Usuario: @${error.username}, Acción: ${error.accion}, Error: ${error.error}\n`;
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('filters-form').addEventListener('submit', async (event) => {
+                event.preventDefault();
+                console.log("[DEBUG] Botón 'Iniciar Acciones' presionado.");
+    
+                const formData = new FormData(event.target);
+    
+                // Verificar qué datos se están enviando
+                console.log("[DEBUG] Datos a enviar:", Object.fromEntries(formData.entries()));
+    
+                try {
+                    // Enviar solicitud al backend a la ruta correcta
+                    const response = await fetch('/acciones', {
+                        method: 'POST',
+                        body: formData,
+                    });
+    
+                    console.log("[DEBUG] Enviando datos al backend...");
+    
+                    if (!response.ok) {
+                        throw new Error(`Error HTTP: ${response.status}`);
+                    }
+    
+                    const data = await response.json();
+                    console.log("[DEBUG] Respuesta del backend:", data);
+    
+                    if (data.success) {
+                        alert("Acciones iniciadas correctamente.");
+                    } else {
+                        alert(`Error: ${data.error}`);
+                    }
+                } catch (error) {
+                    console.error('Error en el proceso:', error);
+                    alert('Hubo un problema al iniciar las acciones.');
+                }
             });
-            alert(mensajeError);
-        }
-    } catch (error) {
-        console.error('Error al realizar acciones en lote:', error);
-        alert('Hubo un problema al realizar las acciones en lote. Revisa la consola para más detalles.');
-    }
-});
-
-    async function cargarMasUsuarios() {
-    const button = document.getElementById('cargar-mas-usuarios');
-    button.disabled = true;
-    button.innerText = 'Cargando...';
-
-    const competencia = document.getElementById('competidores').value.trim();
-    if (!competencia) {
-        alert("Por favor, ingresa una competencia para cargar más usuarios.");
-        button.disabled = false;
-        button.innerText = 'Cargar Más Usuarios';
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append('competencia', competencia);
-
-    try {
-        const response = await fetch('/cargar_mas_usuarios', {
-            method: 'POST',
-            body: formData,
         });
-
-        if (!response.ok) {
-            throw new Error(`Error HTTP: ${response.status}`);
-        }
-
-        const data = await response.json();
-        if (data.success && data.users.length > 0) {
-            const usersContainer = document.getElementById('users-container');
-            data.users.forEach(user => {
-                const userCard = crearUserCard(user);
-                usersContainer.innerHTML += userCard;
-            });
-        } else {
-            alert("No se encontraron usuarios o hubo un error en la respuesta.");
-        }
-    } catch (error) {
-        console.error('Error al cargar más usuarios:', error);
-        alert('Hubo un error al cargar más usuarios.');
-    } finally {
-        button.disabled = false;
-        button.innerText = 'Cargar Más Usuarios';
-    }
-}
-
-
-async function obtenerMetricas() {
-    try {
-        const response = await fetch('/metrics');
-        if (!response.ok) {
-            throw new Error(`Error HTTP: ${response.status}`);
-        }
-        const metrics = await response.json();
-        console.log(metrics);
-
-        // Aquí puedes usar metrics para actualizar gráficos o estadísticas en el frontend.
-    } catch (error) {
-        console.error('Error al obtener métricas:', error);
-    }
-}
-obtenerMetricas();
-
-async function actualizarMetricas() {
-    try {
-        // Hacer una solicitud GET al backend para obtener las métricas
-        const response = await fetch('/metrics');
-        if (!response.ok) {
-            throw new Error(`Error HTTP: ${response.status}`);
-        }
-
-        // Parsear la respuesta
-        const metrics = await response.json();
-
-        // Actualizar los valores en el contenedor de métricas
-        document.getElementById('total-acciones').textContent = metrics.acciones_realizadas || 0;
-        document.getElementById('seguir-usuarios').textContent = metrics.desglose_acciones.seguir_usuario || 0;
-        document.getElementById('dar-me-gusta').textContent = metrics.desglose_acciones.dar_me_gusta_a_publicaciones || 0;
-        document.getElementById('comentar-publicacion').textContent = metrics.desglose_acciones.comentar_publicacion || 0;
-        document.getElementById('enviar-dm').textContent = metrics.desglose_acciones.enviar_dm || 0;
-        document.getElementById('ver-historias').textContent = metrics.desglose_acciones.ver_historias || 0;
-    } catch (error) {
-        console.error('Error al actualizar las métricas:', error);
-    }
-}
-
-// Llamar a la función al cargar la página
-actualizarMetricas();
-
-// Opcional: Actualizar automáticamente cada cierto intervalo (por ejemplo, cada 10 segundos)
-setInterval(actualizarMetricas, 10000);
-
-
-
-document.getElementById('filters-form').addEventListener('submit', async (event) => {
-    event.preventDefault(); // Evita el envío por defecto del formulario
-
-    const usersContainer = document.getElementById('users-container');
-    usersContainer.innerHTML = ""; // Limpiar contenedor de usuarios
-
-    const formData = new FormData(event.target);
-    const competencia = formData.get('competidores');
-    const rol = document.getElementById('rol-ia').value; // Obtén el rol seleccionado
-
-    if (!competencia || competencia.trim() === "") {
-        alert("Debes ingresar al menos una cuenta de competencia.");
-        return;
-    }
-
-    try {
-        // Agregar el rol a los datos del formulario antes de enviarlos
-        formData.append("rol", rol);
-
-        const response = await fetch('/aplicar_filtros', {
-            method: 'POST',
-            body: formData,
-        });
-
-        if (!response.ok) {
-            throw new Error(`Error HTTP: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log("[DEBUG] Usuarios recibidos:", data);
-
-        if (data.success) {
-            data.users.forEach(user => {
-                const userCard = crearUserCard(user);
-                usersContainer.innerHTML += userCard;
-            });
-        } else {
-            alert(`Error al aplicar filtros: ${data.error}`);
-        }
-    } catch (error) {
-        console.error('Error al aplicar filtros:', error);
-        alert('Hubo un problema al aplicar los filtros.');
-    }
-});
-
-
-
-     
     </script>
+    
+    
 </body>
 </html>
