@@ -32,12 +32,18 @@ def manejar_2fa(codigo_2fa):
     Enviar el código de 2FA cuando sea requerido.
     """
     try:
-        cl.two_factor_login(codigo_2fa)
-        print("✅ Código 2FA verificado correctamente.")
-        return {"authenticated": True}
+        # Usamos el método correcto para completar el login con 2FA
+        result = cl.complete_two_factor_login(codigo_2fa)
+
+        if result:
+            print("✅ Código 2FA verificado correctamente.")
+            return {"authenticated": True}
+        else:
+            return {"authenticated": False, "error": "Código incorrecto o sesión inválida."}
     except Exception as e:
         print(f"❌ Error al verificar el código 2FA: {e}")
         return {"authenticated": False, "error": str(e)}
+
 
 
 def reautenticar_sesion():

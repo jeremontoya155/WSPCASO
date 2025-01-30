@@ -4,7 +4,7 @@ from config import UPLOAD_FOLDER, LOG_FOLDER
 from database.models import collection_users
 from instagrapi import Client
 from instagram.follow import  procesar_usuarios, generar_mensaje_combinado
-from instagram.session import autenticar_con_2fa, verificar_autenticacion
+from instagram.session import verificar_autenticacion, manejar_2fa
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import random
@@ -123,56 +123,65 @@ def register():
     return render_template('register.html')
 
 
+
 @app.route('/instagram-login', methods=['POST'])
-@login_required
 def instagram_login():
     username = request.form.get('instagram_username')
     password = request.form.get('instagram_password')
 
     if not username or not password:
-        return render_template('index.html', error="Debes proporcionar un usuario y contraseña de Instagram.")
+        return jsonify({"success": False, "error": "Debes proporcionar un usuario y contraseña de Instagram."})
 
     try:
-        # Intentar iniciar sesión
-        result = autenticar_con_2fa(username, password)
-        if result.get("2fa_required"):
-            # Si se requiere 2FA, guardar información en la sesión
-            session['instagram_user'] = username
-            session['instagram_password'] = password
-            return jsonify({"2fa_required": True, "message": "Se requiere autenticación 2FA. Ingresa el código."})
+        cl = Client()
+        cl.login(username, password)
 
-        # Inicio de sesión exitoso
         session['instagram_user'] = username
         session['instagram_password'] = password
         session['instagram_client'] = cl.get_settings()
+
         print("✅ Inicio de sesión en Instagram exitoso")
         return jsonify({"success": True, "message": "Inicio de sesión exitoso.", "redirect": "/acciones"})
+
     except Exception as e:
+        error_message = str(e).lower()
+
+        if "checkpoint_required" in error_message or "two-factor authentication required" in error_message:
+            print(f"⚠️ Se requiere 2FA para @{username}")
+
+            session['instagram_user'] = username
+            session['instagram_password'] = password
+
+            return jsonify({"2fa_required": True, "message": "Se requiere autenticación 2FA. Ingresa el código."})
+
         print(f"❌ Error al iniciar sesión en Instagram: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/verify-2fa', methods=['POST'])
 def verificar_2fa():
     username = session.get('instagram_user')
+    password = session.get('instagram_password')
     code = request.json.get('code')
 
-    if not username:
+    if not username or not password:
         return jsonify({"success": False, "error": "Usuario no autenticado para verificar 2FA."}), 400
 
     if not code:
         return jsonify({"success": False, "error": "Debes ingresar un código de 2FA."}), 400
 
     try:
-        # Manejar el desafío de 2FA
-        result = cl.challenge_code(code)  # Cambia esto según la librería que estés usando
-        if result:
-            session['two_fa_pending'] = False  # Marcar que el 2FA ha sido completado
-            return jsonify({"success": True, "message": "Autenticación 2FA exitosa.", "redirect": "/acciones"})
-        else:
-            return jsonify({"success": False, "error": "Código 2FA incorrecto."})
+        cl = Client()
+        cl.login(username, password, verification_code=code)
+
+        session['instagram_client'] = cl.get_settings()
+        session['two_fa_pending'] = False
+
+        return jsonify({"success": True, "message": "Autenticación 2FA exitosa.", "redirect": "/acciones"})
+
     except Exception as e:
         print(f"❌ Error al verificar el código 2FA: {e}")
         return jsonify({"success": False, "error": str(e)})
+
 
 def validar_codigo_2fa(code):
     try:
@@ -405,6 +414,7 @@ def chatgpt():
 
 if __name__ == "__main__":
     try:
-        app.run(debug=False, use_reloader=False)
+        app.run(debug=True, use_reloader=True)
     except Exception as e:
+    
         print(f"Error al iniciar la aplicación: {e}")

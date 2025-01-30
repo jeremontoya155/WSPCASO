@@ -28,8 +28,10 @@
                 <label for="2fa-code">Ingrese el Código de 2FA:</label>
                 <input type="text" id="2fa-code" name="code" required>
                 <button type="submit">Enviar Código</button>
+                <p id="error-2fa" style="color: red; margin-top: 10px;"></p> <!-- Mensajes de error -->
             </form>
         </div>
+        
         
 
         <!-- Formulario para cerrar sesión -->
@@ -50,8 +52,8 @@
     const loginForm = document.getElementById('instagram-login-form');
     const twoFaForm = document.getElementById('two-fa-form');
     const twoFaCodeInput = document.getElementById('2fa-code');
+    const errorMessage = document.getElementById("error-2fa");
 
-    // Manejo del envío del formulario de inicio de sesión
     loginForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         const formData = new FormData(loginForm);
@@ -67,10 +69,10 @@
 
             if (data["2fa_required"]) {
                 alert(data.message);
-                document.getElementById('form-2fa').style.display = "block"; // Mostrar formulario de 2FA
+                document.getElementById('form-2fa').style.display = "block";
             } else if (data.success) {
                 alert(data.message);
-                window.location.href = data.redirect; // Redirigir a /acciones
+                window.location.href = data.redirect;
             } else {
                 alert(`Error: ${data.error}`);
             }
@@ -80,7 +82,6 @@
         }
     });
 
-    // Manejo del envío del formulario de 2FA
     twoFaForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         const code = twoFaCodeInput.value;
@@ -98,16 +99,17 @@
 
             if (data.success) {
                 alert("Autenticación 2FA exitosa.");
-                window.location.href = "/acciones"; // Redirigir a /acciones
+                window.location.href = "/acciones";
             } else {
-                alert(`Error en autenticación 2FA: ${data.error}`);
+                errorMessage.innerText = `Error en autenticación 2FA: ${data.error}`;
             }
         } catch (error) {
             console.error("Error en la solicitud de 2FA:", error);
-            alert("Hubo un problema con la autenticación 2FA.");
+            errorMessage.innerText = "Hubo un problema con la autenticación 2FA.";
         }
     });
 });
+
 
     </script>
     
