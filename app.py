@@ -128,33 +128,44 @@ def register():
     return render_template('register.html')
 
 
+
 @app.route('/instagram-login', methods=['POST'])
 def instagram_login():
-    
-    username = request.form.get('instagram_username')
-    password = request.form.get('instagram_password')
-
-    if not username or not password:
-        return jsonify({"success": False, "error": "Debes proporcionar un usuario y contraseña de Instagram."})
-
     try:
+        # ✅ Obtener datos JSON del frontend
+        data = request.get_json()
+        if not data:
+            print("[DEBUG] No se recibieron datos en la solicitud.")
+            return jsonify({"success": False, "error": "No se recibieron datos."})
+
+        username = data.get('instagram_username')
+        password = data.get('instagram_password')
+
+        # ✅ Validar que los datos son correctos
+        if not username or not password:
+            print("[DEBUG] Falta usuario o contraseña en la solicitud.")
+            return jsonify({"success": False, "error": "Debes proporcionar un usuario y contraseña de Instagram."})
+
+        # ✅ Intentar iniciar sesión en Instagram
+        print(f"[DEBUG] Intentando iniciar sesión con el usuario: {username}")
         cl = Client()
         cl.login(username, password)
 
-        # Guardar sesión en Flask
+        # ✅ Guardar sesión en Flask
         session['instagram_user'] = username
         session['instagram_client'] = cl.get_settings()
-        session['user'] = username  # 🔹 Agregado para que el usuario pueda acceder a /acciones
+        session['user'] = username  # 🔹 Permitir acceso a otras rutas
 
-        print("✅ Inicio de sesión en Instagram exitoso. Redirigiendo a /acciones")
-        return jsonify({"success": True, "message": "Inicio de sesión exitoso.", "redirect": "/acciones"})
+        print("✅ Inicio de sesión en Instagram exitoso. Redirigiendo a /index")
+        return jsonify({"success": True, "message": "Inicio de sesión exitoso.", "redirect": "/index"})
 
     except TwoFactorRequired:
-        print(f"⚠️ Se requiere 2FA para @{username}")
+        print(f"⚠️ Se requiere 2FA para el usuario @{username}")
 
+        # ✅ Guardar sesión temporalmente para el 2FA
         session['instagram_user'] = username
         session['instagram_password'] = password
-        session['two_fa_pending'] = True  # Marcar que el 2FA está pendiente
+        session['two_fa_pending'] = True  # 🔹 Marcar que el 2FA está pendiente
 
         return jsonify({
             "success": False, 
@@ -170,7 +181,7 @@ def instagram_login():
         session['challenge_required'] = True
 
         try:
-            # Intentar obtener las opciones de verificación (correo/SMS)
+            # ✅ Intentar resolver automáticamente el challenge
             challenge_data = cl.challenge_resolve()
             print(f"🔹 Opciones de Challenge recibidas: {challenge_data}")
 
@@ -187,9 +198,14 @@ def instagram_login():
                 "error": f"Error al resolver challenge: {str(e)}"
             })
 
+    except LoginRequired:
+        print("⚠️ Se requiere volver a iniciar sesión en Instagram.")
+        return jsonify({"success": False, "error": "Se requiere volver a iniciar sesión en Instagram."})
+
     except Exception as e:
-        print(f"❌ Error inesperado al iniciar sesión en Instagram: {e}")
-        return jsonify({"success": False, "error": f"Error inesperado en /instagram-login: {str(e)}"})
+        print(f"❌ Error inesperado en /instagram-login: {e}")
+        return jsonify({"success": False, "error": f"Error inesperado: {str(e)}"})
+
 
 @app.route('/verify-2fa', methods=['POST'])
 def verify_2fa_route():
