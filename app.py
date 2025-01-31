@@ -130,79 +130,71 @@ def register():
 @app.route('/instagram-login', methods=['POST'])
 def instagram_login():
     try:
-        # ✅ Obtener datos JSON del frontend
+        # Obtener los datos enviados desde el frontend
         data = request.get_json()
         if not data:
-            print("[DEBUG] No se recibieron datos en la solicitud.")
-            return jsonify({"success": False, "error": "No se recibieron datos."}), 400
+            return jsonify({"success": False, "error": "No se recibieron datos en la solicitud."}), 400
 
         username = data.get('instagram_username')
         password = data.get('instagram_password')
 
-        # ✅ Validar que los datos son correctos
         if not username or not password:
-            print("[DEBUG] Falta usuario o contraseña en la solicitud.")
             return jsonify({"success": False, "error": "Debes proporcionar un usuario y contraseña de Instagram."}), 400
 
-        # ✅ Intentar iniciar sesión en Instagram
-        print(f"[DEBUG] Intentando iniciar sesión con el usuario: {username}")
         cl = Client()
-        cl.login(username, password)
-
-        # ✅ Guardar sesión en Flask
-        session['instagram_user'] = username
-        session['instagram_client'] = cl.get_settings()
-        session['user'] = username  # 🔹 Permitir acceso a otras rutas
-
-        print("✅ Inicio de sesión en Instagram exitoso. Redirigiendo a /index")
-        return jsonify({"success": True, "message": "Inicio de sesión exitoso.", "redirect": "/index"})
-
-    except TwoFactorRequired:
-        print(f"⚠️ Se requiere 2FA para el usuario @{username}")
-
-        # ✅ Guardar sesión temporalmente para el 2FA
-        session['instagram_user'] = username
-        session['instagram_password'] = password
-        session['two_fa_pending'] = True  # 🔹 Marcar que el 2FA está pendiente
-
-        return jsonify({
-            "success": False, 
-            "2fa_required": True, 
-            "message": "Se requiere autenticación 2FA. Ingresa el código."
-        })
-
-    except ChallengeRequired:
-        print(f"⚠️ Instagram requiere un desafío adicional para @{username}.")
-
-        session['instagram_user'] = username
-        session['instagram_password'] = password
-        session['challenge_required'] = True
 
         try:
-            # ✅ Intentar resolver automáticamente el challenge
-            challenge_data = cl.challenge_resolve()
-            print(f"🔹 Opciones de Challenge recibidas: {challenge_data}")
+            # Intentar iniciar sesión en Instagram
+            cl.login(username, password)
+
+            # Guardar sesión en Flask
+            session['instagram_user'] = username
+            session['instagram_client'] = cl.get_settings()
+
+            print(f"✅ Inicio de sesión exitoso para @{username}")
+            return jsonify({"success": True, "message": "Inicio de sesión exitoso.", "redirect": "/acciones"})
+
+
+        except TwoFactorRequired:
+            print(f"⚠️ Se requiere autenticación 2FA para @{username}")
+
+            # Guardar credenciales temporalmente para el 2FA
+            session['instagram_user'] = username
+            session['instagram_password'] = password
+            session['two_fa_pending'] = True  
+
+            return jsonify({
+                "success": False, 
+                "2fa_required": True, 
+                "message": "Se requiere autenticación 2FA. Ingresa el código enviado a tu correo o SMS."
+            })
+
+        except ChallengeRequired:
+            print(f"⚠️ Se requiere un desafío de seguridad para @{username}")
+
+            # Guardar credenciales temporalmente para el challenge
+            session['instagram_user'] = username
+            session['instagram_password'] = password
+            session['challenge_required'] = True
 
             return jsonify({
                 "success": False,
                 "challenge_required": True,
-                "message": "Se requiere verificación por challenge. Ingresa el código."
+                "message": "Instagram requiere verificación. Ingresa el código enviado a tu correo o SMS."
             })
 
-        except Exception as e:
-            print(f"❌ Error al intentar resolver el challenge automáticamente: {e}")
-            return jsonify({
-                "success": False,
-                "error": f"Error al resolver challenge: {str(e)}"
-            }), 500
+        except LoginRequired:
+            print(f"⚠️ Se requiere volver a iniciar sesión en Instagram para @{username}")
+            return jsonify({"success": False, "error": "Tu sesión de Instagram ha expirado. Por favor, inicia sesión nuevamente."}), 401
 
-    except LoginRequired:
-        print("⚠️ Se requiere volver a iniciar sesión en Instagram.")
-        return jsonify({"success": False, "error": "Se requiere volver a iniciar sesión en Instagram."}), 401
+        except Exception as e:
+            print(f"❌ Error inesperado al iniciar sesión con @{username}: {e}")
+            return jsonify({"success": False, "error": f"Ocurrió un error durante el inicio de sesión: {str(e)}"}), 500
 
     except Exception as e:
-        print(f"❌ Error inesperado en /instagram-login: {e}")
-        return jsonify({"success": False, "error": f"Error inesperado: {str(e)}"}), 500
+        print(f"❌ Error en la solicitud a /instagram-login: {e}")
+        return jsonify({"success": False, "error": f"Error inesperado en el servidor: {str(e)}"}), 500
+
 
 
 @app.route('/verify-2fa', methods=['POST'])
@@ -301,7 +293,7 @@ def verificar_2fa_completado(func):
             return redirect('/login')  # Redirigir al formulario de login
 
         if session.get('two_fa_pending', True):  # Si el 2FA está pendiente
-            print("[DEBUG] 2FA pendiente. Redirigiendo a /")
+            print("[DEBUG] 2FA pendiente. Redirigiendo a /acciones")
             return redirect('/login')  # Redirigir al formulario de inicio de sesión
 
         return func(*args, **kwargs)
