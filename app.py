@@ -126,6 +126,8 @@ def register():
 
 
 
+from instagrapi.exceptions import ChallengeRequired
+
 @app.route('/instagram-login', methods=['POST'])
 def instagram_login():
     username = request.form.get('instagram_username')
@@ -137,14 +139,14 @@ def instagram_login():
     try:
         cl = Client()
 
-        # Cargar sesión previa si existe (para evitar el 2FA en cada login)
+        # Intentar restaurar sesión previa
         if 'instagram_client' in session:
             cl.set_settings(session['instagram_client'])
-            print("🔄 [DEBUG] Se restauró la sesión guardada.")
+            print("🔄 [DEBUG] Se restauró la sesión guardada en Railway.")
 
         cl.login(username, password)
 
-        # Guardar la sesión para futuros logins sin 2FA
+        # Guardar sesión para futuros logins sin 2FA
         session['instagram_user'] = username
         session['instagram_password'] = password
         session['instagram_client'] = cl.get_settings()
@@ -152,19 +154,20 @@ def instagram_login():
         print("✅ Inicio de sesión en Instagram exitoso")
         return jsonify({"success": True, "message": "Inicio de sesión exitoso.", "redirect": "/acciones"})
 
+    except ChallengeRequired as e:
+        print(f"⚠️ [DEBUG] Instagram requiere verificación para {username}")
+
+        # Intentar obtener el método de verificación (correo, SMS, etc.)
+        challenge = cl.challenge_resolve()
+        if challenge.get("step_name") == "select_verify_method":
+            return jsonify({"2fa_required": True, "message": "Instagram requiere verificación. Ingresa el código que recibirás por email."})
+
+        return jsonify({"success": False, "error": "Se requiere verificación adicional en Instagram."})
+
     except Exception as e:
-        error_message = str(e).lower()
-
-        if "challenge required" in error_message or "two-factor authentication required" in error_message:
-            print(f"⚠️ Se requiere 2FA para @{username}")
-
-            session['instagram_user'] = username
-            session['instagram_password'] = password
-
-            return jsonify({"2fa_required": True, "message": "Se requiere autenticación 2FA. Ingresa el código."})
-
-        print(f"❌ Error al iniciar sesión en Instagram: {e}")
+        print(f"❌ [ERROR] al iniciar sesión en Instagram: {e}")
         return jsonify({"success": False, "error": str(e)})
+
 
 @app.route('/verify-2fa', methods=['POST'])
 def verificar_2fa():

@@ -86,6 +86,11 @@
         event.preventDefault();
         const code = twoFaCodeInput.value;
 
+        if (!code) {
+            errorMessage.innerText = "Debes ingresar un código de verificación.";
+            return;
+        }
+
         try {
             const response = await fetch('/verify-2fa', {
                 method: 'POST',
@@ -96,6 +101,7 @@
             });
 
             const data = await response.json();
+            console.log("[DEBUG] Respuesta de 2FA:", data);
 
             if (data.success) {
                 alert("Autenticación 2FA exitosa.");
@@ -109,7 +115,6 @@
         }
     });
 });
-
 
     </script>
     
