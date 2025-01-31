@@ -37,37 +37,31 @@ def construir_prompt(username, bio=None, intereses=None, ultima_publicacion=None
     Latest post: {ultima_publicacion or 'Not specified'}.
     Generate a brief, specific, and engaging response considering the user's bio and interests.
     """
-
 def generar_mensaje_ia(username, bio=None, intereses=None, ultima_publicacion=None, rol="friendly", prompt=None, nombre=None):
-    """
-    Genera un mensaje breve y personalizado utilizando OpenAI, priorizando el nombre de la cuenta si está disponible.
-    """
+    """Genera un mensaje breve y personalizado utilizando OpenAI."""
     try:
-        # Usar username como prioridad, luego nombre, y finalmente "friend"
-        saludo = username if username else (nombre if nombre else "friend")
-
-        # Si hay un prompt personalizado, úsalo directamente
         if prompt:
-            contenido = prompt
+            contenido = f"Keep this message in English, improve it but keep the same meaning: {prompt}"
         else:
-            # Construir el prompt estándar
-            contenido = construir_prompt(username=saludo, bio=bio, intereses=intereses, ultima_publicacion=ultima_publicacion, rol=rol)
-        
-        # Llamada a la API de OpenAI con tokens más bajos para mensajes cortos
+            contenido = construir_prompt(username=username, bio=bio, intereses=intereses, ultima_publicacion=ultima_publicacion, rol=rol)
+
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are an assistant generating brief, personalized, and friendly responses."},
+                {"role": "system", "content": "You are an AI assistant that always responds in English, improving messages without changing their meaning."},
                 {"role": "user", "content": contenido}
             ],
             temperature=0.7,
-            max_tokens=30  # Reducir tokens para mensajes más cortos
+            max_tokens=200  # Aumentado para comentarios más largos
         )
 
-        # Obtener y devolver la respuesta generada
         mensaje = response.choices[0].message.content.strip()
+
+        # Comentarios más largos, se elimina o aumenta el límite según necesidad
+        # if len(mensaje.split()) > 50:  # Ajusta este número si es necesario
+        #     mensaje = " ".join(mensaje.split()[:50]) + "..."
 
         return mensaje
     except Exception as e:
         print(f"❌ Error generating message with OpenAI: {e}")
-        return "There was an error generating the message."
+        return "Error generating the message."

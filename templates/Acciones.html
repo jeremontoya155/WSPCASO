@@ -64,42 +64,57 @@
     
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            document.getElementById('filters-form').addEventListener('submit', async (event) => {
-                event.preventDefault();
-                console.log("[DEBUG] Botón 'Iniciar Acciones' presionado.");
-    
-                const formData = new FormData(event.target);
-    
-                // Verificar qué datos se están enviando
-                console.log("[DEBUG] Datos a enviar:", Object.fromEntries(formData.entries()));
-    
-                try {
-                    // Enviar solicitud al backend a la ruta correcta
-                    const response = await fetch('/acciones', {
-                        method: 'POST',
-                        body: formData,
-                    });
-    
-                    console.log("[DEBUG] Enviando datos al backend...");
-    
-                    if (!response.ok) {
-                        throw new Error(`Error HTTP: ${response.status}`);
-                    }
-    
-                    const data = await response.json();
-                    console.log("[DEBUG] Respuesta del backend:", data);
-    
-                    if (data.success) {
-                        alert("Acciones iniciadas correctamente.");
-                    } else {
-                        alert(`Error: ${data.error}`);
-                    }
-                } catch (error) {
-                    console.error('Error en el proceso:', error);
-                    alert('Hubo un problema al iniciar las acciones.');
+        document.getElementById('filters-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            console.log("[DEBUG] Botón 'Iniciar Acciones' presionado.");
+
+            const formData = new FormData(event.target);
+
+            // Subir los mensajes primero
+            try {
+                console.log("[DEBUG] Subiendo mensajes...");
+                const uploadResponse = await fetch('/cargar_mensajes', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!uploadResponse.ok) {
+                    throw new Error(`Error en la carga de mensajes: ${uploadResponse.status}`);
                 }
-            });
+
+                const uploadData = await uploadResponse.json();
+                console.log("[DEBUG] Respuesta de carga de mensajes:", uploadData);
+
+                if (!uploadData.success) {
+                    alert(`Error al subir mensajes: ${uploadData.error}`);
+                    return;
+                }
+
+                // Ahora enviar los datos de acciones
+                console.log("[DEBUG] Enviando datos de acciones al backend...");
+                const response = await fetch('/acciones', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Error HTTP: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log("[DEBUG] Respuesta del backend:", data);
+
+                if (data.success) {
+                    alert("Acciones iniciadas correctamente.");
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (error) {
+                console.error('Error en el proceso:', error);
+                alert('Hubo un problema al iniciar las acciones.');
+            }
         });
+    });
     </script>
     
     

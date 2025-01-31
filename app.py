@@ -346,29 +346,40 @@ def cargar_mensajes():
         mensajes_dm = []
         mensajes_comentarios = []
 
-        # Procesar mensajes para DM
-        if 'mensajes_dm' in request.files:
-            for file in request.files.getlist('mensajes_dm'):
-                contenido = file.read().decode('utf-8').splitlines()
-                mensajes_dm.extend(contenido)
+        # Diccionario para registrar qué archivos fueron subidos
+        session['archivos_subidos'] = session.get('archivos_subidos', {})
 
-        # Procesar mensajes para comentarios
-        if 'mensajes_comentarios' in request.files:
-            for file in request.files.getlist('mensajes_comentarios'):
+        for file_key in request.files:
+            for file in request.files.getlist(file_key):
                 contenido = file.read().decode('utf-8').splitlines()
-                mensajes_comentarios.extend(contenido)
 
-        # Aquí se pueden guardar los mensajes en variables globales, sesiones o bases de datos
-        session['mensajes_dm'] = mensajes_dm
-        session['mensajes_comentarios'] = mensajes_comentarios
+                # Verificar qué campo del formulario subió el archivo
+                if file_key == "mensajes_dm":
+                    mensajes_dm.extend(contenido)
+                    session['archivos_subidos']['dm'] = file.filename
+                elif file_key == "mensajes_comentarios":
+                    mensajes_comentarios.extend(contenido)
+                    session['archivos_subidos']['comentarios'] = file.filename
+                else:
+                    print(f"⚠️ [ADVERTENCIA] Archivo {file.filename} subido en un campo no identificado.")
+
+        # Guardamos los mensajes en la sesión asegurándonos de no sobrescribir erróneamente
+        session['mensajes_dm'] = mensajes_dm if mensajes_dm else []
+        session['mensajes_comentarios'] = mensajes_comentarios if mensajes_comentarios else []
+
+        print(f"✅ Archivos subidos correctamente: {session['archivos_subidos']}")
+        print(f"✅ Mensajes DM: {len(mensajes_dm)}, Mensajes Comentarios: {len(mensajes_comentarios)}")
 
         return jsonify({
             "success": True,
             "mensajes_dm": len(mensajes_dm),
             "mensajes_comentarios": len(mensajes_comentarios),
+            "archivos_subidos": session['archivos_subidos']
         })
     except Exception as e:
+        print(f"❌ [ERROR] al cargar los archivos de mensajes: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
 
 
 @app.route("/chatgpt", methods=["POST"])
@@ -414,7 +425,7 @@ def chatgpt():
 
 if __name__ == "__main__":
     try:
-        app.run(debug=True, use_reloader=True)
+        app.run(debug=False, use_reloader=False)
     except Exception as e:
     
         print(f"Error al iniciar la aplicación: {e}")

@@ -1,27 +1,10 @@
 
 
 
-def aplicar_filtros_individual(usuario, filtros):
+def filtrar_usuarios(usuarios):
     """
-    Aplica filtros a un usuario individual basado en los criterios proporcionados.
-    Retorna True si el usuario cumple con los filtros, False en caso contrario.
+    Filtra usuarios para excluir cuentas privadas y cuentas sin publicaciones.
     """
-    try:
-        print(f"[DEBUG] Procesando usuario: {usuario.get('username', 'desconocido')}")
-        
-        # Filtros específicos aquí...
-        if filtros.get("min_seguidores") and usuario.get("follower_count", 0) < filtros["min_seguidores"]:
-            print(f"[DEBUG] Usuario @{usuario['username']} descartado por no cumplir con el mínimo de seguidores.")
-            return False
-
-        return True
-    except Exception as e:
-        print(f"❌ Error al aplicar filtros a @{usuario.get('username', 'desconocido')}: {e}")
-        return False
-
-
-
-def filtrar_usuarios(usuarios, filtros):
     print(f"Aplicando filtros a {len(usuarios)} usuarios...")
     usuarios_filtrados = []
     usuarios_omitidos = []
@@ -35,40 +18,15 @@ def filtrar_usuarios(usuarios, filtros):
 
             # Validar que el usuario tenga los campos necesarios
             username = usuario.get("username", "desconocido")
-            biography = usuario.get("biography", "").lower()
 
-            # Filtro por ubicación
-            if "ubicaciones" in filtros and filtros["ubicaciones"]:
-                ubicaciones = [ubicacion.lower() for ubicacion in filtros["ubicaciones"]]
-                if not any(ubicacion in biography for ubicacion in ubicaciones):
-                    motivo_exclusion = "ubicación no coincide"
+            # Filtro: Omitir si la cuenta es privada
+            if usuario.get("is_private", False):  
+                motivo_exclusion = "cuenta privada"
 
-            # Filtro por palabras clave
-            if motivo_exclusion is None and "palabras_clave" in filtros and filtros["palabras_clave"]:
-                palabras_clave = [palabra.lower() for palabra in filtros["palabras_clave"]]
-                if not any(palabra in biography for palabra in palabras_clave):
-                    motivo_exclusion = "sin palabras clave en biografía"
-
-            # Filtro por número mínimo de publicaciones
-            if motivo_exclusion is None and "min_publicaciones" in filtros:
-                publicaciones = usuario.get("media_count", 0)
-                if publicaciones < filtros["min_publicaciones"]:
-                    motivo_exclusion = f"menos de {filtros['min_publicaciones']} publicaciones"
-
-            # Filtro por número mínimo de seguidores
-            if motivo_exclusion is None and "min_seguidores" in filtros:
-                seguidores = usuario.get("followers", 0)
-                if seguidores < filtros["min_seguidores"]:
-                    motivo_exclusion = f"menos de {filtros['min_seguidores']} seguidores"
-
-            # Filtro por tipo de cuenta (pública/privada)
-            if motivo_exclusion is None and "tipo_cuenta" in filtros:
-                tipo_cuenta = filtros["tipo_cuenta"]
-                es_privada = usuario.get("is_private", False)
-                if tipo_cuenta == "publica" and es_privada:
-                    motivo_exclusion = "cuenta privada"
-                elif tipo_cuenta == "privada" and not es_privada:
-                    motivo_exclusion = "cuenta pública"
+            # Filtro: Omitir si el usuario no tiene publicaciones
+            publicaciones = usuario.get("media_count", 0)
+            if motivo_exclusion is None and publicaciones == 0:
+                motivo_exclusion = "sin publicaciones"
 
             # Decidir si incluir o excluir al usuario
             if motivo_exclusion is None:
@@ -87,6 +45,4 @@ def filtrar_usuarios(usuarios, filtros):
         print(f"Usuario omitido: {omitido[0]}, Motivo: {omitido[1]}")
 
     return usuarios_filtrados, usuarios_omitidos
-
-
 
