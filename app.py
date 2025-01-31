@@ -14,6 +14,8 @@ from functools import wraps
 from openai_utils import generar_mensaje_ia
 from instagram.config_bot import PAUSAS_POR_ACCION
 from datetime import datetime, timedelta
+from instagrapi.exceptions import ChallengeRequired
+import logging
 
 os.environ['FLASK_ENV'] = 'development'  # Simula el entorno local en producción
 
@@ -126,7 +128,9 @@ def register():
 
 
 
-from instagrapi.exceptions import ChallengeRequired
+
+# Configuración del logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 @app.route('/instagram-login', methods=['POST'])
 def instagram_login():
@@ -142,7 +146,7 @@ def instagram_login():
         # Intentar restaurar sesión previa
         if 'instagram_client' in session:
             cl.set_settings(session['instagram_client'])
-            print("🔄 [DEBUG] Se restauró la sesión guardada en Railway.")
+            logging.info(" [DEBUG] Se restauró la sesión guardada en Railway.")
 
         cl.login(username, password)
 
@@ -151,11 +155,11 @@ def instagram_login():
         session['instagram_password'] = password
         session['instagram_client'] = cl.get_settings()
 
-        print("✅ Inicio de sesión en Instagram exitoso")
+        logging.info("✅ Inicio de sesión en Instagram exitoso")
         return jsonify({"success": True, "message": "Inicio de sesión exitoso.", "redirect": "/acciones"})
 
     except ChallengeRequired as e:
-        print(f"⚠️ [DEBUG] Instagram requiere verificación para {username}")
+        logging.warning(f"⚠️ [DEBUG] Instagram requiere verificación para {username}")
 
         # Intentar obtener el método de verificación (correo, SMS, etc.)
         challenge = cl.challenge_resolve()
@@ -165,7 +169,7 @@ def instagram_login():
         return jsonify({"success": False, "error": "Se requiere verificación adicional en Instagram."})
 
     except Exception as e:
-        print(f"❌ [ERROR] al iniciar sesión en Instagram: {e}")
+        logging.exception(f"❌ [ERROR] al iniciar sesión en Instagram: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 
@@ -192,7 +196,7 @@ def verificar_2fa():
         return jsonify({"success": True, "message": "Autenticación 2FA exitosa.", "redirect": "/acciones"})
 
     except Exception as e:
-        print(f"❌ Error al verificar el código 2FA: {e}")
+        logging.exception(f"❌ Error al verificar el código 2FA: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 
