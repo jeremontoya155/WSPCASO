@@ -15,6 +15,8 @@ from openai_utils import generar_mensaje_ia
 from instagram.config_bot import PAUSAS_POR_ACCION
 from datetime import datetime, timedelta
 
+os.environ['FLASK_ENV'] = 'development'  # Simula el entorno local en producción
+
 
 
 # Configurar la aplicación Flask
@@ -134,8 +136,15 @@ def instagram_login():
 
     try:
         cl = Client()
+
+        # Cargar sesión previa si existe (para evitar el 2FA en cada login)
+        if 'instagram_client' in session:
+            cl.set_settings(session['instagram_client'])
+            print("🔄 [DEBUG] Se restauró la sesión guardada.")
+
         cl.login(username, password)
 
+        # Guardar la sesión para futuros logins sin 2FA
         session['instagram_user'] = username
         session['instagram_password'] = password
         session['instagram_client'] = cl.get_settings()
@@ -146,7 +155,7 @@ def instagram_login():
     except Exception as e:
         error_message = str(e).lower()
 
-        if "checkpoint_required" in error_message or "two-factor authentication required" in error_message:
+        if "challenge required" in error_message or "two-factor authentication required" in error_message:
             print(f"⚠️ Se requiere 2FA para @{username}")
 
             session['instagram_user'] = username
@@ -173,6 +182,7 @@ def verificar_2fa():
         cl = Client()
         cl.login(username, password, verification_code=code)
 
+        # Guardar la sesión para evitar pedir 2FA en futuros logins
         session['instagram_client'] = cl.get_settings()
         session['two_fa_pending'] = False
 
