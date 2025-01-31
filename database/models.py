@@ -5,7 +5,7 @@ from pymongo.errors import DuplicateKeyError
 from datetime import datetime
 from pymongo import MongoClient
 import os
-
+import logging
 
 
 
@@ -49,7 +49,17 @@ except Exception as e:
     print("Error al interactuar con las colecciones:", str(e))
     raise e
 
+def borrar_token(username):
+    nombre_archivo = f"sesion_{username}.json"  # Nombre del archivo para este usuario
+    ruta_archivo = os.path.join("ruta/a/tus/archivos/sesion", nombre_archivo)  # Ruta completa al archivo
 
+    try:
+        os.remove(ruta_archivo)  # Elimina el archivo
+        logging.info(f"Sesión borrada para @{username} (archivo: {nombre_archivo})")
+    except FileNotFoundError:
+        logging.warning(f"No se encontró archivo de sesión para @{username}")
+    except Exception as e:
+        logging.error(f"Error al borrar sesión para @{username}: {e}")
 # Funciones para manejo de tokens
 def guardar_token(username, settings):
     """

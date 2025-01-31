@@ -1,12 +1,12 @@
 from instagrapi import Client
 from instagrapi.exceptions import LoginRequired
-from database.models import guardar_token, obtener_token,collection_users
-from instagrapi.exceptions import ChallengeRequired
+from database.models import guardar_token, obtener_token,collection_users, borrar_token
 from instagrapi.exceptions import TwoFactorRequired
 from config import PROXIES
 from flask import session
 from instagrapi.exceptions import LoginRequired, TwoFactorRequired
-
+import logging
+from instagrapi.exceptions import ChallengeRequired
 cl = Client()
 
 from instagrapi.exceptions import TwoFactorRequired
@@ -103,32 +103,39 @@ def iniciar_sesion(username, password):
         print(f"Error al iniciar sesión: {e}")
         raise
 
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
 def iniciar_sesion_persistente(username, password):
-    """
-    Intenta iniciar sesión utilizando una sesión guardada, o inicia una nueva sesión.
-    """
     try:
-        # Cargar configuración guardada de la sesión
+        # Intentar cargar sesión
         settings = obtener_token(username)
         if settings:
-            cl.set_settings(settings)
-            cl.get_timeline_feed()  # Valida la sesión cargada
-            print(f"✅ Sesión restaurada para @{username}.")
-            return True
+            try:
+                cl.set_settings(settings)
+                cl.get_timeline_feed()
+                logging.info(f"Sesión restaurada para @{username}")
+                return True
+            except EOFError:
+                logging.error(f"Error EOF al cargar sesión para @{username}. Se borrará la sesión.")
+                borrar_token(username)  # Función para borrar el token guardado
+            except Exception as e:
+                logging.error(f"Error al cargar sesión para @{username}: {e}")
         else:
-            print(f"No se encontró sesión guardada para @{username}. Iniciando nueva sesión.")
+            logging.info(f"No se encontró sesión guardada para @{username}")
     except Exception as e:
-        print(f"⚠️ Error al restaurar sesión: {e}")
+        logging.error(f"Error al intentar cargar sesión para @{username}: {e}")
 
-    # Si no hay sesión válida, iniciar una nueva
+    # Iniciar sesión desde cero si falla la carga o no hay sesión
     try:
         cl.login(username, password)
-        guardar_token(username, cl.get_settings())  # Guardar nueva sesión
-        print("✅ Sesión iniciada y guardada correctamente.")
+        guardar_token(username, cl.get_settings())
+        logging.info(f"Sesión iniciada y guardada para @{username}")
         return True
     except Exception as e:
-        print(f"❌ Error al iniciar sesión: {e}")
+        logging.error(f"Error al iniciar sesión para @{username}: {e}")
         return False
+
 
 
 def guardar_sesion(username):

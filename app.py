@@ -129,75 +129,75 @@ def register():
 
 
 
-# Configuración del logging
+
+
+
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Ruta para el inicio de sesión en Instagram
 @app.route('/instagram-login', methods=['POST'])
 def instagram_login():
     username = request.form.get('instagram_username')
     password = request.form.get('instagram_password')
 
     if not username or not password:
-        return jsonify({"success": False, "error": "Debes proporcionar un usuario y contraseña de Instagram."})
+        return jsonify({"success": False, "error": "Nombre de usuario y contraseña son requeridos."}), 400
 
     try:
         cl = Client()
 
-        # Intentar restaurar sesión previa
+        # Intenta restaurar la sesión (ya no se guarda la contraseña)
         if 'instagram_client' in session:
             cl.set_settings(session['instagram_client'])
-            logging.info(" [DEBUG] Se restauró la sesión guardada en Railway.")
+            logging.info(f"Sesión restaurada para {session.get('instagram_user')}")
 
-        cl.login(username, password)
+        cl.login(username, password)  # Intento de inicio de sesión inicial
 
-        # Guardar sesión para futuros logins sin 2FA
         session['instagram_user'] = username
-        session['instagram_password'] = password
-        session['instagram_client'] = cl.get_settings()
+        session['instagram_client'] = cl.get_settings() # Guarda la configuración, no la contraseña
 
-        logging.info("✅ Inicio de sesión en Instagram exitoso")
-        return jsonify({"success": True, "message": "Inicio de sesión exitoso.", "redirect": "/acciones"})
+        logging.info(f"Inicio de sesión en Instagram exitoso para {username}")
+        return jsonify({"success": True, "redirect": "/acciones"})
 
     except ChallengeRequired as e:
-        logging.warning(f"⚠️ [DEBUG] Instagram requiere verificación para {username}")
-
-        # Intentar obtener el método de verificación (correo, SMS, etc.)
+        logging.warning(f"Se requiere 2FA para {username}: {e}")
         challenge = cl.challenge_resolve()
         if challenge.get("step_name") == "select_verify_method":
-            return jsonify({"2fa_required": True, "message": "Instagram requiere verificación. Ingresa el código que recibirás por email."})
-
-        return jsonify({"success": False, "error": "Se requiere verificación adicional en Instagram."})
+            return jsonify({"2fa_required": True, "message": "Se requiere 2FA. Por favor, ingresa el código."})
+        return jsonify({"success": False, "error": "Se requiere 2FA pero no se pudo determinar el método."}), 400
 
     except Exception as e:
-        logging.exception(f"❌ [ERROR] al iniciar sesión en Instagram: {e}")
-        return jsonify({"success": False, "error": str(e)})
+        logging.exception(f"Error en el inicio de sesión de Instagram: {e}")
+        return jsonify({"success": False, "error": f"Error en el inicio de sesión: {e}"}), 500
 
 
+# Ruta para verificar el código 2FA
 @app.route('/verify-2fa', methods=['POST'])
-def verificar_2fa():
+def verify_2fa():
     username = session.get('instagram_user')
-    password = session.get('instagram_password')
+    client_settings = session.get('instagram_client')
     code = request.json.get('code')
 
-    if not username or not password:
-        return jsonify({"success": False, "error": "Usuario no autenticado para verificar 2FA."}), 400
+    if not username or not client_settings:
+        return jsonify({"success": False, "error": "Usuario no autenticado."}), 400
 
     if not code:
-        return jsonify({"success": False, "error": "Debes ingresar un código de 2FA."}), 400
+        return jsonify({"success": False, "error": "Código 2FA es requerido."}), 400
 
     try:
         cl = Client()
-        cl.login(username, password, verification_code=code)
+        cl.set_settings(client_settings) # Restaura el cliente desde la configuración
+        cl.login(username, settings=client_settings, verification_code=code) # Inicia sesión con el código
 
-        # Guardar la sesión para evitar pedir 2FA en futuros logins
         session['instagram_client'] = cl.get_settings()
-        session['two_fa_pending'] = False
-
-        return jsonify({"success": True, "message": "Autenticación 2FA exitosa.", "redirect": "/acciones"})
+        logging.info(f"Verificación 2FA exitosa para {username}")
+        return jsonify({"success": True, "redirect": "/acciones"})
 
     except Exception as e:
-        logging.exception(f"❌ Error al verificar el código 2FA: {e}")
-        return jsonify({"success": False, "error": str(e)})
+        logging.exception(f"Error en la verificación 2FA: {e}")
+        return jsonify({"success": False, "error": f"Error en la verificación 2FA: {e}"}), 500
+
+
 
 
 def validar_codigo_2fa(code):
