@@ -169,7 +169,7 @@ def instagram_login():
         logging.warning(f"⚠️ Instagram requiere verificación para {username}: {e}")
 
         session['instagram_user'] = username
-        cl.challenge_resolve(cl.last_json.get("challenge", {}).get("url"))  # Intentar resolver automáticamente
+        session['challenge_url'] = cl.last_json.get("challenge", {}).get("url")  # Guardar URL del desafío
 
         return jsonify({"challenge_required": True, "message": "Instagram requiere verificación. Revisa tu correo o SMS."})
 
@@ -177,25 +177,20 @@ def instagram_login():
         logging.exception(f"❌ Error en el inicio de sesión de Instagram: {e}")
         return jsonify({"success": False, "error": f"Error en el inicio de sesión: {e}"}), 500
 
-
-# Ruta para verificar el código 2FA
 @app.route('/verify-challenge', methods=['POST'])
 def verify_challenge():
     username = session.get('instagram_user')
-    client_settings = session.get('instagram_client')
+    challenge_url = session.get('challenge_url')
     code = request.json.get('code')
 
-    if not username or not client_settings:
-        return jsonify({"success": False, "error": "Usuario no autenticado."}), 400
+    if not username or not challenge_url:
+        return jsonify({"success": False, "error": "No hay desafío pendiente."}), 400
 
     if not code:
         return jsonify({"success": False, "error": "Código de verificación requerido."}), 400
 
     try:
         cl = Client()
-        cl.set_settings(client_settings)
-
-        # Enviar el código de verificación recibido por correo/SMS
         result = cl.challenge_code_submit(code)
 
         if result:
@@ -208,7 +203,6 @@ def verify_challenge():
     except Exception as e:
         logging.exception(f"❌ Error al verificar el código de desafío: {e}")
         return jsonify({"success": False, "error": f"Error al verificar el código: {e}"}), 500
-
 
 
 def validar_codigo_2fa(code):

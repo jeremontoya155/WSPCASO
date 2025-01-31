@@ -51,8 +51,6 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('instagram-login-form');
-    const twoFaForm = document.getElementById('two-fa-form');
-    const twoFaCodeInput = document.getElementById('2fa-code');
     const challengeForm = document.getElementById('challenge-form');
     const challengeCodeInput = document.getElementById('challenge-code');
 
@@ -69,10 +67,7 @@
             const data = await response.json();
             console.log("[DEBUG] Respuesta del backend:", data);
 
-            if (data["2fa_required"]) {
-                alert(data.message);
-                document.getElementById('form-2fa').style.display = "block";
-            } else if (data["challenge_required"]) {
+            if (data["challenge_required"]) {
                 alert(data.message);
                 document.getElementById('form-challenge').style.display = "block";
             } else if (data.success) {
@@ -119,6 +114,7 @@
         }
     });
 });
+
 
     </script>
     

@@ -86,22 +86,18 @@ def verificar_autenticacion():
 
 def iniciar_sesion(username, password):
     try:
+        print(f"🔐 Intentando iniciar sesión para @{username}")
         cl.login(username, password)
-        print("Sesión iniciada correctamente.")
-    except ChallengeRequired:
-        print("Se requiere resolver un desafío de seguridad.")
-        challenge_url = cl.last_json.get("challenge", {}).get("url")
-        if challenge_url:
-            try:
-                cl.challenge_resolve(challenge_url)
-                print("Desafío resuelto automáticamente.")
-            except Exception as e:
-                print(f"No se pudo resolver el desafío automáticamente: {e}")
-                print("Es necesario que inicies sesión manualmente.")
-                raise
+        print(f"✅ Sesión iniciada correctamente para @{username}")
+        return {"authenticated": True, "challenge_required": False}
+    except ChallengeRequired as e:
+        print(f"⚠️ Se requiere verificación de seguridad para @{username}")
+        session['instagram_user'] = username
+        return {"authenticated": False, "challenge_required": True, "message": "Instagram requiere verificación. Revisa tu correo o SMS."}
     except Exception as e:
-        print(f"Error al iniciar sesión: {e}")
-        raise
+        print(f"❌ Error durante la autenticación: {e}")
+        return {"authenticated": False, "error": str(e)}
+
 
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
