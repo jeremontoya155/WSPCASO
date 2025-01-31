@@ -127,8 +127,6 @@ def register():
             return render_template('register.html', error="Error interno del servidor.")
     return render_template('register.html')
 
-
-
 @app.route('/instagram-login', methods=['POST'])
 def instagram_login():
     try:
@@ -136,7 +134,7 @@ def instagram_login():
         data = request.get_json()
         if not data:
             print("[DEBUG] No se recibieron datos en la solicitud.")
-            return jsonify({"success": False, "error": "No se recibieron datos."})
+            return jsonify({"success": False, "error": "No se recibieron datos."}), 400
 
         username = data.get('instagram_username')
         password = data.get('instagram_password')
@@ -144,7 +142,7 @@ def instagram_login():
         # ✅ Validar que los datos son correctos
         if not username or not password:
             print("[DEBUG] Falta usuario o contraseña en la solicitud.")
-            return jsonify({"success": False, "error": "Debes proporcionar un usuario y contraseña de Instagram."})
+            return jsonify({"success": False, "error": "Debes proporcionar un usuario y contraseña de Instagram."}), 400
 
         # ✅ Intentar iniciar sesión en Instagram
         print(f"[DEBUG] Intentando iniciar sesión con el usuario: {username}")
@@ -196,15 +194,15 @@ def instagram_login():
             return jsonify({
                 "success": False,
                 "error": f"Error al resolver challenge: {str(e)}"
-            })
+            }), 500
 
     except LoginRequired:
         print("⚠️ Se requiere volver a iniciar sesión en Instagram.")
-        return jsonify({"success": False, "error": "Se requiere volver a iniciar sesión en Instagram."})
+        return jsonify({"success": False, "error": "Se requiere volver a iniciar sesión en Instagram."}), 401
 
     except Exception as e:
         print(f"❌ Error inesperado en /instagram-login: {e}")
-        return jsonify({"success": False, "error": f"Error inesperado: {str(e)}"})
+        return jsonify({"success": False, "error": f"Error inesperado: {str(e)}"}), 500
 
 
 @app.route('/verify-2fa', methods=['POST'])
