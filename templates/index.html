@@ -58,19 +58,28 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('instagram-login-form');
-    const twoFaForm = document.getElementById('form-2fa'); // Asegurar que el elemento está correctamente referenciado
+    const twoFaForm = document.getElementById('two-fa-form');
     const twoFaCodeInput = document.getElementById('2fa-code');
     const errorTwoFaMessage = document.getElementById("error-2fa");
-    const challengeForm = document.getElementById('form-challenge');
+    const challengeForm = document.getElementById('challenge-form');
+    const challengeCodeInput = document.getElementById('challenge-code');
+    const errorChallengeMessage = document.getElementById("error-challenge");
 
+    // 🔹 Evento para iniciar sesión en Instagram
     loginForm.addEventListener('submit', async (event) => {
         event.preventDefault();
-        const formData = new FormData(loginForm);
+        const formData = {
+            instagram_username: document.getElementById('instagram-username').value,
+            instagram_password: document.getElementById('instagram-password').value
+        };
 
         try {
             const response = await fetch('/instagram-login', {
                 method: 'POST',
-                body: formData,
+                headers: {
+                    'Content-Type': 'application/json', 
+                },
+                body: JSON.stringify(formData),
             });
 
             const data = await response.json();
@@ -83,10 +92,11 @@
             } else if (data["2fa_required"]) {
                 alert(data.message);
                 console.log("[DEBUG] Mostrando formulario 2FA");
-                twoFaForm.style.display = "block"; // Asegurar que el formulario se muestre
+                twoFaForm.style.display = "block";
                 challengeForm.style.display = "none";
             } else if (data.success) {
                 alert(data.message);
+                console.log("[DEBUG] Redirigiendo a:", data.redirect);
                 window.location.href = data.redirect;
             } else {
                 alert(`Error: ${data.error || data.message || "Error desconocido."}`);
@@ -97,76 +107,79 @@
         }
     });
 
-            twoFaForm.addEventListener('submit', async (event) => {
-                event.preventDefault();
-                const code = twoFaCodeInput.value;
-        
-                if (!code) {
-                    errorTwoFaMessage.innerText = "Debes ingresar un código de 2FA.";
-                    return;
-                }
-        
-                try {
-                    const response = await fetch('/verify-2fa', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ code }),
-                    });
-        
-                    const data = await response.json();
-                    console.log("[DEBUG] Respuesta del backend (2FA):", data);
-        
-                    if (data["challenge_required"]) {
-                        alert(data.message);
-                        challengeForm.style.display = "block"; // Mostrar formulario de desafío si es necesario
-                        twoFaForm.style.display = "none"; // Ocultar 2FA
-                    } else if (data.success) {
-                        alert("Autenticación 2FA exitosa.");
-                        window.location.href = "/acciones";
-                    } else {
-                        errorTwoFaMessage.innerText = `Error en autenticación 2FA: ${data.error || data.message || "Error desconocido."}`;
-                    }
-                } catch (error) {
-                    console.error("Error en la solicitud de 2FA:", error);
-                    errorTwoFaMessage.innerText = "Hubo un problema con la autenticación 2FA.";
-                }
+    // 🔹 Evento para enviar código 2FA
+    twoFaForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const code = twoFaCodeInput.value.trim();
+
+        if (!code) {
+            errorTwoFaMessage.innerText = "Debes ingresar un código de 2FA.";
+            return;
+        }
+
+        try {
+            const response = await fetch('/verify-2fa', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ code }),
             });
-        
-            challengeForm.addEventListener('submit', async (event) => {
-                event.preventDefault();
-                const code = challengeCodeInput.value;
-        
-                if (!code) {
-                    errorChallengeMessage.innerText = "Debes ingresar un código de verificación.";
-                    return;
-                }
-        
-                try {
-                    const response = await fetch('/verify-challenge', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ code }),
-                    });
-        
-                    const data = await response.json();
-                    console.log("[DEBUG] Respuesta del backend (Challenge):", data);
-        
-                    if (data.success) {
-                        alert("Verificación completada.");
-                        window.location.href = "/acciones";
-                    } else {
-                        errorChallengeMessage.innerText = `Error: ${data.error || "Error desconocido."}`;
-                    }
-                } catch (error) {
-                    console.error("Error en la solicitud de verificación:", error);
-                    errorChallengeMessage.innerText = "Hubo un problema con la verificación.";
-                }
+
+            const data = await response.json();
+            console.log("[DEBUG] Respuesta del backend (2FA):", data);
+
+            if (data["challenge_required"]) {
+                alert(data.message);
+                challengeForm.style.display = "block";
+                twoFaForm.style.display = "none";
+            } else if (data.success) {
+                alert("Autenticación 2FA exitosa.");
+                window.location.href = "/index"; 
+            } else {
+                errorTwoFaMessage.innerText = `Error en autenticación 2FA: ${data.error || data.message || "Error desconocido."}`;
+            }
+        } catch (error) {
+            console.error("Error en la solicitud de 2FA:", error);
+            errorTwoFaMessage.innerText = "Hubo un problema con la autenticación 2FA.";
+        }
+    });
+
+    // 🔹 Evento para enviar código Challenge
+    challengeForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const code = challengeCodeInput.value.trim();
+
+        if (!code) {
+            errorChallengeMessage.innerText = "Debes ingresar un código de verificación.";
+            return;
+        }
+
+        try {
+            const response = await fetch('/verify-challenge', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ code }),
             });
-        });
+
+            const data = await response.json();
+            console.log("[DEBUG] Respuesta del backend (Challenge):", data);
+
+            if (data.success) {
+                alert("Verificación completada.");
+                window.location.href = "/index"; 
+            } else {
+                errorChallengeMessage.innerText = `Error: ${data.error || "Error desconocido."}`;
+            }
+        } catch (error) {
+            console.error("Error en la solicitud de verificación:", error);
+            errorChallengeMessage.innerText = "Hubo un problema con la verificación.";
+        }
+    });
+});
+
         </script>
         
 </body>
