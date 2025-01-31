@@ -22,18 +22,25 @@
         </form>
         
 
+        <div id="form-2fa" style="display: none;">
+            <h2>Autenticación 2FA</h2>
+            <form id="two-fa-form">
+                <label for="2fa-code">Ingrese el Código de 2FA:</label>
+                <input type="text" id="2fa-code" name="code" required>
+                <button type="submit">Enviar Código</button>
+                <p id="error-2fa" style="color: red; margin-top: 10px;"></p>
+            </form>
+        </div>
+
         <div id="form-challenge" style="display: none;">
             <h2>Verificación de Seguridad</h2>
-            <form id="challenge-form" method="POST">
+            <form id="challenge-form">
                 <label for="challenge-code">Ingrese el Código de Verificación:</label>
                 <input type="text" id="challenge-code" name="code" required>
                 <button type="submit">Enviar Código</button>
                 <p id="error-challenge" style="color: red; margin-top: 10px;"></p>
             </form>
         </div>
-        
-        
-        
 
         <!-- Formulario para cerrar sesión -->
         <form action="/logout" method="POST" style="margin-top: 20px; text-align: center;">
@@ -51,8 +58,10 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('instagram-login-form');
-    const challengeForm = document.getElementById('challenge-form');
-    const challengeCodeInput = document.getElementById('challenge-code');
+    const twoFaForm = document.getElementById('form-2fa'); // Asegurar que el elemento está correctamente referenciado
+    const twoFaCodeInput = document.getElementById('2fa-code');
+    const errorTwoFaMessage = document.getElementById("error-2fa");
+    const challengeForm = document.getElementById('form-challenge');
 
     loginForm.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -69,54 +78,96 @@
 
             if (data["challenge_required"]) {
                 alert(data.message);
-                document.getElementById('form-challenge').style.display = "block";
+                challengeForm.style.display = "block";
+                twoFaForm.style.display = "none";
+            } else if (data["2fa_required"]) {
+                alert(data.message);
+                console.log("[DEBUG] Mostrando formulario 2FA");
+                twoFaForm.style.display = "block"; // Asegurar que el formulario se muestre
+                challengeForm.style.display = "none";
             } else if (data.success) {
                 alert(data.message);
                 window.location.href = data.redirect;
             } else {
-                alert(`Error: ${data.error}`);
+                alert(`Error: ${data.error || data.message || "Error desconocido."}`);
             }
         } catch (error) {
-            console.error("Error en la solicitud:", error);
-            alert("Hubo un problema al iniciar sesión. Por favor, inténtalo de nuevo.");
+            console.error("[DEBUG] Error en la solicitud:", error);
+            alert("Hubo un problema al iniciar sesión.");
         }
     });
 
-    challengeForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const code = challengeCodeInput.value;
-
-        if (!code) {
-            document.getElementById("error-challenge").innerText = "Debes ingresar un código de verificación.";
-            return;
-        }
-
-        try {
-            const response = await fetch('/verify-challenge', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ code }),
+            twoFaForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const code = twoFaCodeInput.value;
+        
+                if (!code) {
+                    errorTwoFaMessage.innerText = "Debes ingresar un código de 2FA.";
+                    return;
+                }
+        
+                try {
+                    const response = await fetch('/verify-2fa', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ code }),
+                    });
+        
+                    const data = await response.json();
+                    console.log("[DEBUG] Respuesta del backend (2FA):", data);
+        
+                    if (data["challenge_required"]) {
+                        alert(data.message);
+                        challengeForm.style.display = "block"; // Mostrar formulario de desafío si es necesario
+                        twoFaForm.style.display = "none"; // Ocultar 2FA
+                    } else if (data.success) {
+                        alert("Autenticación 2FA exitosa.");
+                        window.location.href = "/acciones";
+                    } else {
+                        errorTwoFaMessage.innerText = `Error en autenticación 2FA: ${data.error || data.message || "Error desconocido."}`;
+                    }
+                } catch (error) {
+                    console.error("Error en la solicitud de 2FA:", error);
+                    errorTwoFaMessage.innerText = "Hubo un problema con la autenticación 2FA.";
+                }
             });
-
-            const data = await response.json();
-
-            if (data.success) {
-                alert("Verificación completada.");
-                window.location.href = "/acciones";
-            } else {
-                document.getElementById("error-challenge").innerText = `Error: ${data.error}`;
-            }
-        } catch (error) {
-            console.error("Error en la solicitud de verificación:", error);
-            document.getElementById("error-challenge").innerText = "Hubo un problema con la verificación.";
-        }
-    });
-});
-
-
-    </script>
-    
+        
+            challengeForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const code = challengeCodeInput.value;
+        
+                if (!code) {
+                    errorChallengeMessage.innerText = "Debes ingresar un código de verificación.";
+                    return;
+                }
+        
+                try {
+                    const response = await fetch('/verify-challenge', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ code }),
+                    });
+        
+                    const data = await response.json();
+                    console.log("[DEBUG] Respuesta del backend (Challenge):", data);
+        
+                    if (data.success) {
+                        alert("Verificación completada.");
+                        window.location.href = "/acciones";
+                    } else {
+                        errorChallengeMessage.innerText = `Error: ${data.error || "Error desconocido."}`;
+                    }
+                } catch (error) {
+                    console.error("Error en la solicitud de verificación:", error);
+                    errorChallengeMessage.innerText = "Hubo un problema con la verificación.";
+                }
+            });
+        });
+        </script>
+        
 </body>
 </html>

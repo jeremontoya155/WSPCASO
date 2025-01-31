@@ -27,23 +27,33 @@ def autenticar_con_2fa(username, password):
         print(f"❌ Error durante la autenticación: {e}")
         return {"authenticated": False, "error": str(e)}
 
-def manejar_2fa(codigo_2fa):
-    """
-    Enviar el código de 2FA cuando sea requerido.
-    """
+
+def manejar_2fa(username, codigo_2fa):
+    """Maneja la verificación del código 2FA para Instagram."""
     try:
-        # Usamos el método correcto para completar el login con 2FA
-        result = cl.complete_two_factor_login(codigo_2fa)
+        cl = Client()
+        settings = session.get('instagram_client')
+
+        if not settings:
+            logging.error(f"❌ No se encontró sesión para {username} antes de verificar 2FA.")
+            return {"authenticated": False, "error": "La sesión de Instagram no está disponible. Inténtalo de nuevo."}
+
+        cl.set_settings(settings)  # Restaurar la sesión antes de enviar el código
+
+        # Intentar iniciar sesión con el código 2FA
+        result = cl.two_factor_login(codigo_2fa)
 
         if result:
-            print("✅ Código 2FA verificado correctamente.")
+            logging.info(f"✅ Código 2FA correcto para {username}. Sesión actualizada.")
+            session['instagram_client'] = cl.get_settings()
+            session['two_fa_pending'] = False
             return {"authenticated": True}
         else:
             return {"authenticated": False, "error": "Código incorrecto o sesión inválida."}
-    except Exception as e:
-        print(f"❌ Error al verificar el código 2FA: {e}")
-        return {"authenticated": False, "error": str(e)}
 
+    except Exception as e:
+        logging.exception(f"❌ Error al verificar el código 2FA para {username}: {e}")
+        return {"authenticated": False, "error": f"Error inesperado: {e}"}
 
 
 def reautenticar_sesion():
@@ -83,55 +93,50 @@ def verificar_autenticacion():
         print(f"❌ Error al verificar la autenticación: {e}")
         return False
 
-
 def iniciar_sesion(username, password):
     try:
-        print(f"🔐 Intentando iniciar sesión para @{username}")
         cl.login(username, password)
-        print(f"✅ Sesión iniciada correctamente para @{username}")
-        return {"authenticated": True, "challenge_required": False}
+        print("Sesión iniciada correctamente.")
     except ChallengeRequired as e:
-        print(f"⚠️ Se requiere verificación de seguridad para @{username}")
-        session['instagram_user'] = username
-        return {"authenticated": False, "challenge_required": True, "message": "Instagram requiere verificación. Revisa tu correo o SMS."}
+        print(f"Se requiere resolver un desafío de seguridad: {e}")
+        # Intenta resolver el desafío automáticamente o proporciona instrucciones al usuario
+        raise  # Vuelve a lanzar la excepción para que se maneje en otro lugar
+    except TwoFactorRequired as e:
+        print(f"Se requiere autenticación de dos factores: {e}")
+        raise
+    except LoginRequired as e:
+        print(f"Error de inicio de sesión: {e}")
+        raise
     except Exception as e:
-        print(f"❌ Error durante la autenticación: {e}")
-        return {"authenticated": False, "error": str(e)}
-
-
-
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+        print(f"Error inesperado al iniciar sesión: {e}")
+        raise
 
 def iniciar_sesion_persistente(username, password):
+    """
+    Intenta iniciar sesión utilizando una sesión guardada, o inicia una nueva sesión.
+    """
     try:
-        # Intentar cargar sesión
+        # Cargar configuración guardada de la sesión
         settings = obtener_token(username)
         if settings:
-            try:
-                cl.set_settings(settings)
-                cl.get_timeline_feed()
-                logging.info(f"Sesión restaurada para @{username}")
-                return True
-            except EOFError:
-                logging.error(f"Error EOF al cargar sesión para @{username}. Se borrará la sesión.")
-                borrar_token(username)  # Función para borrar el token guardado
-            except Exception as e:
-                logging.error(f"Error al cargar sesión para @{username}: {e}")
+            cl.set_settings(settings)
+            cl.get_timeline_feed()  # Valida la sesión cargada
+            print(f"✅ Sesión restaurada para @{username}.")
+            return True
         else:
-            logging.info(f"No se encontró sesión guardada para @{username}")
+            print(f"No se encontró sesión guardada para @{username}. Iniciando nueva sesión.")
     except Exception as e:
-        logging.error(f"Error al intentar cargar sesión para @{username}: {e}")
+        print(f"⚠️ Error al restaurar sesión: {e}")
 
-    # Iniciar sesión desde cero si falla la carga o no hay sesión
+    # Si no hay sesión válida, iniciar una nueva
     try:
         cl.login(username, password)
-        guardar_token(username, cl.get_settings())
-        logging.info(f"Sesión iniciada y guardada para @{username}")
+        guardar_token(username, cl.get_settings())  # Guardar nueva sesión
+        print("✅ Sesión iniciada y guardada correctamente.")
         return True
     except Exception as e:
-        logging.error(f"Error al iniciar sesión para @{username}: {e}")
+        print(f"❌ Error al iniciar sesión: {e}")
         return False
-
 
 
 def guardar_sesion(username):
