@@ -131,8 +131,10 @@ def iniciar_sesion_persistente(username, password):
     # Si no hay sesión válida, iniciar una nueva
     try:
         cl.login(username, password)
-        guardar_token(username, cl.get_settings())  # Guardar nueva sesión
+        session['instagram_client'] = cl.get_settings()  # Guardar en la sesión Flask
+        guardar_token(username, cl.get_settings())  # Guardar en la base de datos
         print("✅ Sesión iniciada y guardada correctamente.")
+
         return True
     except Exception as e:
         print(f"❌ Error al iniciar sesión: {e}")
@@ -196,17 +198,26 @@ def reautenticar_si_es_necesario():
 
 
 def verificar_autenticacion():
+    # Cargar la configuración de sesión guardada
+    settings = session.get('instagram_client')  # Cargar sesión guardada
+    if settings:
+        cl.set_settings(settings)  # Restaurar sesión antes de verificar autenticación
+
     try:
+        # Probar la sesión activa
         cl.get_timeline_feed()  # Valida la sesión activa
         print("✅ Sesión de Instagram válida.")
         return True
     except LoginRequired:
-        print("⚠️ Sesión no válida. Reintentando autenticación...")
+        print("⚠️ Sesión no válida. Intentando renovar...")
+        # Intentar renovar la sesión si no es válida
         username = session.get('instagram_user')
         password = session.get('instagram_password')
         if username and password:
             try:
-                cl.login(username, password)
+                cl.login(username, password)  # Reautenticar
+                # Guardar la nueva configuración de sesión
+                session['instagram_client'] = cl.get_settings()  
                 print("✅ Sesión renovada con éxito.")
                 return True
             except Exception as e:
@@ -255,8 +266,6 @@ def verificar_sesion():
         return False
 
 
-
-
 def configurar_cliente():
     cl.set_device({
         "app_version": "269.0.0.18.75",
@@ -273,4 +282,5 @@ def configurar_cliente():
     cl.set_user_agent(
         "Instagram 269.0.0.18.75 Android (26/8.0.0; 480dpi; 1080x1920; Samsung; Galaxy S10; exynos9820; en_US; 269185202)"
     )
-    cl.set_proxy(PROXIES["http"])
+    cl.set_proxy(PROXIES.get("https", PROXIES.get("http")))
+

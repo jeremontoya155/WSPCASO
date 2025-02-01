@@ -2,6 +2,8 @@ import os
 from dotenv import load_dotenv
 from celery import Celery
 import requests
+from requests.auth import HTTPProxyAuth
+from instagrapi import Client
 
 # Cargar las variables de entorno desde .env
 load_dotenv()
@@ -39,21 +41,23 @@ def make_celery(app):
     celery.conf.update(app.config)
     return celery
 
-# Configuración de proxy (solo si es necesario)
-PROXY = os.getenv("PROXY")  # Leer la variable PROXY del archivo .env
+# Cargar proxy desde .env
+PROXY = os.getenv("PROXY")
 PROXIES = {
     "http": PROXY,
     "https": PROXY
-} if PROXY else None  # Si no hay proxy, asigna None
-
-# Headers para simular un navegador y evitar bloqueos
-headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 }
 
+# DEBUG: Verificar configuración del proxy
+print("[DEBUG] PROXY configurado:", PROXIES)
+
+# Probar conexión con proxy
 try:
-    print("Realizando solicitud sin proxy...")
-    response = requests.get("https://www.instagram.com", headers=headers)
-    print("Estado de la respuesta:", response.status_code)
+    response = requests.get("https://www.instagram.com", proxies=PROXIES)
+    print("[DEBUG] Estado de la respuesta al probar el proxy:", response.status_code)
 except Exception as e:
-    print("Error al realizar la solicitud:", e)
+    print("[ERROR] Falló la prueba de conexión con el proxy:", e)
+
+# Inicialización del cliente de Instagram
+cl = Client()
+
